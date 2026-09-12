@@ -1,9 +1,0 @@
-﻿{
-  "name": "dostlik-market-monorepo",
-  "private": true,
-  "version": "1.0.0",
-  "scripts": {
-    "build": "cd shop-debt-owner-admin && npm install && npm run build",
-    "dev": "cd shop-debt-owner-admin && npm run dev"
-  }
-}
