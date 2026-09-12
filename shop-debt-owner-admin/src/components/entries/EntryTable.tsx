@@ -138,6 +138,18 @@ export const EntryTable: React.FC<EntryTableProps> = ({
                 </div>
               )}
 
+              {/* Attribution: Who recorded & who confirmed */}
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="inline-flex items-center gap-1 text-slate-700 bg-slate-200/90 px-2 py-0.5 rounded-lg font-medium border border-slate-300">
+                  ✍️ Yozdi: <strong className="text-slate-900 font-bold">{entry.recorded_by_name || entry.creator_profile?.full_name || 'Abubakir'}</strong>
+                </span>
+                {!isOpen && (
+                  <span className="inline-flex items-center gap-1 text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-lg font-bold border border-emerald-300">
+                    ✅ Tasdiqladi: <strong className="text-emerald-950 font-black">{entry.confirmed_by_name || entry.confirmer_profile?.full_name || 'Muhammad'}</strong>
+                  </span>
+                )}
+              </div>
+
               <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-[11px] text-slate-500">
                 <div className="flex items-center gap-1 font-medium">
                   <Calendar className="w-3 h-3 text-slate-400" />

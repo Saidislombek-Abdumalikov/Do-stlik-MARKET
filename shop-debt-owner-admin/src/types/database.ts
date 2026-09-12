@@ -14,6 +14,8 @@ export interface Profile {
   role: UserRole;
   full_name: string;
   phone?: string | null;
+  pin_code?: string;
+  avatar_color?: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -30,11 +32,15 @@ export interface Entry {
   due_date?: string | null;
   paid_at?: string | null;
   created_by?: string | null;
+  recorded_by_name?: string | null;
+  confirmed_by?: string | null;
+  confirmed_by_name?: string | null;
   last_edited_by?: string | null;
   created_at: string;
   updated_at: string;
   // Joined relation:
   creator_profile?: Profile | null;
+  confirmer_profile?: Profile | null;
 }
 
 export interface EntryHistoryChange {

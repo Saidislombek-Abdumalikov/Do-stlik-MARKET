@@ -336,8 +336,8 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
     setIsSaving(true);
     try {
-      const adminId = profile?.id || 'owner-uuid-1';
-      const adminName = profile?.full_name || 'Do‘kon Egasi';
+      const adminId = profile?.id || 'user-abubakir';
+      const adminName = profile?.full_name || 'Abubakir';
       const description =
         [
           editItems.trim(),
@@ -359,6 +359,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
           description,
           paid_at: null,
           created_by: adminId,
+          recorded_by_name: adminName,
           last_edited_by: adminId,
         },
         { id: adminId, name: adminName }
@@ -426,11 +427,12 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
     setIsSettlingId(entry.id);
     try {
-      const adminId = profile?.id || 'owner-uuid-1';
+      const adminId = profile?.id || 'user-muhammad';
+      const adminName = profile?.full_name || 'Muhammad';
       await entriesService.payOrReduceDebt(
         entry.id,
         currentAmount,
-        { id: adminId, name: profile?.full_name || 'Do‘kon Egasi' },
+        { id: adminId, name: adminName },
         'AI Ovozli yordamchi orqali to‘liq to‘landi'
       );
 

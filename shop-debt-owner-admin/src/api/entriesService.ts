@@ -90,7 +90,12 @@ export const entriesService = {
       if (error) throw error;
       return data as Profile[];
     }
-    return getStored(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
+    const current = getStored<Profile[]>(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
+    if (!current || current.length !== 3 || !current.some((p: Profile) => p.id === 'user-abubakir')) {
+      setStored(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
+      return INITIAL_MOCK_PROFILES;
+    }
+    return current;
   },
 
   async toggleWorkerStatus(workerId: string, isActive: boolean, adminUser: { id: string; name: string }): Promise<void> {
@@ -234,6 +239,11 @@ export const entriesService = {
 
     // Mock fallback with full filtering logic
     let items = getStored<Entry[]>(STORAGE_ENTRIES, INITIAL_MOCK_ENTRIES);
+    // Auto-heal old entries if they used old worker IDs
+    if (items.some((e) => e.created_by === 'worker-uuid-1' || (!e.recorded_by_name && e.created_by))) {
+      items = INITIAL_MOCK_ENTRIES;
+      setStored(STORAGE_ENTRIES, items);
+    }
     const profiles = getStored<Profile[]>(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
 
     if (filters.search?.trim()) {
@@ -272,10 +282,11 @@ export const entriesService = {
       items = items.filter((e) => new Date(e.created_at) <= new Date(effectiveEnd));
     }
 
-    // Populate creator profiles
+    // Populate creator and confirmer profiles
     const populated = items.map((item) => ({
       ...item,
-      creator_profile: profiles.find((p) => p.id === item.created_by) || null,
+      creator_profile: profiles.find((p) => p.id === item.created_by) || item.creator_profile || null,
+      confirmer_profile: profiles.find((p) => p.id === item.confirmed_by) || item.confirmer_profile || null,
     }));
 
     const total = populated.length;
@@ -314,7 +325,8 @@ export const entriesService = {
 
     const populatedEntry: Entry = {
       ...found,
-      creator_profile: profiles.find((p) => p.id === found.created_by) || null,
+      creator_profile: profiles.find((p) => p.id === found.created_by) || found.creator_profile || null,
+      confirmer_profile: profiles.find((p) => p.id === found.confirmed_by) || found.confirmer_profile || null,
     };
     const entryHistories = histories.filter((h) => h.entry_id === id);
 
@@ -333,6 +345,7 @@ export const entriesService = {
       ...newEntryData,
       id: entryId,
       created_by: adminUser.id,
+      recorded_by_name: adminUser.name,
       last_edited_by: adminUser.id,
       created_at: nowStr,
       updated_at: nowStr,
@@ -352,6 +365,7 @@ export const entriesService = {
           due_date: newEntryData.due_date,
           paid_at: newEntryData.status === 'paid' ? nowStr : null,
           created_by: validAdminId,
+          recorded_by_name: adminUser.name,
           last_edited_by: validAdminId,
         })
         .select('*, creator_profile:profiles!created_by(*)')
@@ -640,6 +654,8 @@ export const entriesService = {
           status: newStatus,
           paid_at: isFullyPaid ? nowStr : existing.paid_at,
           amount: newAmount,
+          confirmed_by: isFullyPaid ? validAdminId : existing.confirmed_by,
+          confirmed_by_name: isFullyPaid ? adminUser.name : existing.confirmed_by_name,
           last_edited_by: validAdminId,
           updated_at: nowStr,
         })
@@ -700,6 +716,8 @@ export const entriesService = {
       status: newStatus,
       paid_at: isFullyPaid ? nowStr : existing.paid_at,
       amount: newAmount,
+      confirmed_by: isFullyPaid ? adminUser.id : existing.confirmed_by,
+      confirmed_by_name: isFullyPaid ? adminUser.name : existing.confirmed_by_name,
       last_edited_by: adminUser.id,
       updated_at: nowStr,
     };

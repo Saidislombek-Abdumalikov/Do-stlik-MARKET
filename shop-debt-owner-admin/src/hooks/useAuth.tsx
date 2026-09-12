@@ -6,10 +6,16 @@ import { INITIAL_MOCK_PROFILES } from '../api/mockData';
 interface AuthContextType {
   user: { id: string; email?: string } | null;
   profile: Profile | null;
+  profiles: Profile[];
+  selectedProfile: Profile | null;
+  setSelectedProfile: (profile: Profile | null) => void;
   isOwner: boolean;
   isLoading: boolean;
-  login: (email: string, pass: string) => Promise<void>;
+  loginWithPin: (pin: string, profileId?: string) => Promise<boolean>;
+  login: (phoneOrEmail: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
+  lockApp: () => void;
+  clearError: () => void;
   authError: string | null;
 }
 
@@ -18,6 +24,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [profiles] = useState<Profile[]>(INITIAL_MOCK_PROFILES);
+  const [selectedProfile, setSelectedProfile] = useState<Profile | null>(INITIAL_MOCK_PROFILES[0]);
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -25,12 +33,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let mounted = true;
 
     async function initAuth() {
+      const isLocked = localStorage.getItem('dostlik_is_locked') === 'true';
+      const storedProfileId = localStorage.getItem('dostlik_active_profile_id');
+
       if (isSupabaseConfigured()) {
         try {
           const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user && mounted) {
+          if (session?.user && mounted && !isLocked) {
             setUser({ id: session.user.id, email: session.user.email });
-            // fetch profile
             const { data: prof } = await supabase
               .from('profiles')
               .select('*')
@@ -38,6 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               .single();
             if (prof && mounted) {
               setProfile(prof as Profile);
+              setSelectedProfile(prof as Profile);
             }
           }
         } catch (err) {
@@ -68,26 +79,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           authListener.subscription.unsubscribe();
         };
       } else {
-        // Fallback local owner session check
-        const defaultOwner = INITIAL_MOCK_PROFILES[0];
-        const stored = localStorage.getItem('dostlik_active_owner');
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored);
-            setUser({ id: parsed.id, email: parsed.email || 'owner@dostlikmarket.uz' });
-            setProfile(parsed.profile || defaultOwner);
-          } catch {
-            setUser({ id: defaultOwner.id, email: 'owner@dostlikmarket.uz' });
-            setProfile(defaultOwner);
+        // Fast PIN mode for store:
+        if (!isLocked && storedProfileId) {
+          const found = INITIAL_MOCK_PROFILES.find((p) => p.id === storedProfileId);
+          if (found) {
+            setUser({ id: found.id, email: `${found.id}@dostlikmarket.uz` });
+            setProfile(found);
+            setSelectedProfile(found);
+          } else {
+            setUser(null);
+            setSelectedProfile(INITIAL_MOCK_PROFILES[0]);
           }
         } else {
-          localStorage.setItem('dostlik_active_owner', JSON.stringify({
-            id: defaultOwner.id,
-            email: 'owner@dostlikmarket.uz',
-            profile: defaultOwner,
-          }));
-          setUser({ id: defaultOwner.id, email: 'owner@dostlikmarket.uz' });
-          setProfile(defaultOwner);
+          // Locked screen or first load
+          setUser(null);
+          const lastActive = storedProfileId
+            ? INITIAL_MOCK_PROFILES.find((p) => p.id === storedProfileId)
+            : null;
+          setSelectedProfile(lastActive || INITIAL_MOCK_PROFILES[0]);
         }
         setIsLoading(false);
       }
@@ -98,6 +107,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       mounted = false;
     };
   }, []);
+
+  const clearError = () => setAuthError(null);
+
+  const loginWithPin = async (pin: string, profileId?: string): Promise<boolean> => {
+    setAuthError(null);
+    setIsLoading(true);
+
+    await new Promise((r) => setTimeout(r, 200));
+
+    let matched: Profile | undefined;
+    const targetId = profileId || selectedProfile?.id;
+
+    if (targetId) {
+      const p = INITIAL_MOCK_PROFILES.find((prof) => prof.id === targetId);
+      if (p && p.pin_code === pin) {
+        matched = p;
+      }
+    }
+
+    // Direct match fallback: if pin matches any of the 3 accounts, log in directly
+    if (!matched) {
+      matched = INITIAL_MOCK_PROFILES.find((prof) => prof.pin_code === pin);
+    }
+
+    if (!matched) {
+      setAuthError('Noto‘g‘ri PIN kod! Qaytadan tering.');
+      setIsLoading(false);
+      return false;
+    }
+
+    localStorage.setItem('dostlik_active_profile_id', matched.id);
+    localStorage.removeItem('dostlik_is_locked');
+
+    setUser({ id: matched.id, email: `${matched.id}@dostlikmarket.uz` });
+    setProfile(matched);
+    setSelectedProfile(matched);
+    setIsLoading(false);
+    return true;
+  };
 
   const login = async (phoneOrEmail: string, pass: string) => {
     setAuthError(null);
@@ -116,20 +164,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error) throw error;
         if (!data.user) throw new Error('Foydalanuvchi topilmadi');
 
-        // Verify owner role
         const { data: prof, error: pErr } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', data.user.id)
           .single();
 
-        if (pErr || !prof || prof.role !== 'owner') {
-          await supabase.auth.signOut();
-          throw new Error('Kirish rad etildi: Bu hisob do‘kon egasiga tegishli emas!');
+        if (pErr || !prof) {
+          throw new Error('Foydalanuvchi profili topilmadi');
         }
 
         setUser({ id: data.user.id, email: data.user.email });
         setProfile(prof as Profile);
+        setSelectedProfile(prof as Profile);
       } catch (err: any) {
         setAuthError(err.message || 'Kirishda xatolik yuz berdi');
         throw err;
@@ -139,48 +186,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    // Local simulated login for testing
-    await new Promise((r) => setTimeout(r, 300));
-    if (pass.length < 4) {
-      const err = 'Parol kamida 4 belgidan iborat bo‘lishi kerak!';
-      setAuthError(err);
-      setIsLoading(false);
-      throw new Error(err);
-    }
+    // Local fallback
+    const matched = INITIAL_MOCK_PROFILES.find(
+      (p) => p.phone?.replace(/\D/g, '') === cleanPhone || p.pin_code === pass
+    ) || INITIAL_MOCK_PROFILES[0];
 
-    const defaultOwnerProfile = INITIAL_MOCK_PROFILES[0];
-    const sessionObj = {
-      id: defaultOwnerProfile.id,
-      email: phoneOrEmail,
-      profile: defaultOwnerProfile,
-    };
-    localStorage.setItem('dostlik_active_owner', JSON.stringify(sessionObj));
-    setUser({ id: sessionObj.id, email: phoneOrEmail });
-    setProfile(defaultOwnerProfile);
+    localStorage.setItem('dostlik_active_profile_id', matched.id);
+    localStorage.removeItem('dostlik_is_locked');
+    setUser({ id: matched.id, email: `${matched.id}@dostlikmarket.uz` });
+    setProfile(matched);
+    setSelectedProfile(matched);
     setIsLoading(false);
+  };
+
+  const lockApp = () => {
+    localStorage.setItem('dostlik_is_locked', 'true');
+    setUser(null);
+    setAuthError(null);
   };
 
   const logout = async () => {
     if (isSupabaseConfigured()) {
       await supabase.auth.signOut();
-    } else {
-      localStorage.removeItem('dostlik_active_owner');
     }
+    localStorage.removeItem('dostlik_active_profile_id');
+    localStorage.setItem('dostlik_is_locked', 'true');
     setUser(null);
     setProfile(null);
+    setAuthError(null);
   };
 
-  const isOwner = profile?.role === 'owner' || !isSupabaseConfigured();
+  const isOwner = profile?.role === 'owner';
 
   return (
     <AuthContext.Provider
       value={{
-        user: user || { id: INITIAL_MOCK_PROFILES[0].id, email: 'owner@dostlikmarket.uz' },
-        profile: profile || INITIAL_MOCK_PROFILES[0],
+        user,
+        profile,
+        profiles,
+        selectedProfile,
+        setSelectedProfile,
         isOwner,
         isLoading,
+        loginWithPin,
         login,
         logout,
+        lockApp,
+        clearError,
         authError,
       }}
     >
@@ -192,15 +244,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    // Safe default owner fallback so app NEVER crashes if context is missing
-    const defaultOwner = INITIAL_MOCK_PROFILES[0];
+    const defaultOwner = INITIAL_MOCK_PROFILES[2];
     return {
-      user: { id: defaultOwner.id, email: 'owner@dostlikmarket.uz' },
+      user: null,
       profile: defaultOwner,
+      profiles: INITIAL_MOCK_PROFILES,
+      selectedProfile: defaultOwner,
+      setSelectedProfile: () => {},
       isOwner: true,
       isLoading: false,
+      loginWithPin: async () => false,
       login: async () => {},
       logout: async () => {},
+      lockApp: () => {},
+      clearError: () => {},
       authError: null,
     };
   }

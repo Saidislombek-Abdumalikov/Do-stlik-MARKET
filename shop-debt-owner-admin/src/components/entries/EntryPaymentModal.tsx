@@ -45,8 +45,8 @@ export const EntryPaymentModal: React.FC<EntryPaymentModalProps> = ({
     setIsProcessing(true);
 
     const adminUser = {
-      id: profile?.id || 'owner-uuid-1',
-      name: profile?.full_name || 'Do‘kon Egasi',
+      id: profile?.id || 'user-muhammad',
+      name: profile?.full_name || 'Muhammad',
     };
 
     try {

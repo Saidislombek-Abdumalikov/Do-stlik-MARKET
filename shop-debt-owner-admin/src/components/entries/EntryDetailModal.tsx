@@ -4,7 +4,7 @@ import { entriesService } from '../../api/entriesService';
 import { formatMoney, formatDateTime, formatDate } from '../../utils/formatters';
 import { Badge } from '../common/Badge';
 import { Modal } from '../common/Modal';
-import { Clock, User, Calendar, FileText, Phone, Edit3 } from 'lucide-react';
+import { Clock, User, Calendar, Phone, Edit3 } from 'lucide-react';
 
 interface EntryDetailModalProps {
   isOpen: boolean;
@@ -66,18 +66,18 @@ export const EntryDetailModal: React.FC<EntryDetailModalProps> = ({
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-300 shadow-2xs">
             <div className="flex items-center gap-1 text-slate-600 mb-0.5 font-bold">
-              <User className="w-3.5 h-3.5 text-slate-500" />
-              <span>Kiritgan:</span>
+              <User className="w-3.5 h-3.5 text-violet-700" />
+              <span>Qarzni Yozgan:</span>
             </div>
             <div className="font-black text-slate-900 truncate">
-              {entry.creator_profile?.full_name || 'Ishchi'}
+              {entry.recorded_by_name || entry.creator_profile?.full_name || 'Abubakir'}
             </div>
           </div>
 
           <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-300 shadow-2xs">
             <div className="flex items-center gap-1 text-slate-600 mb-0.5 font-bold">
               <Calendar className="w-3.5 h-3.5 text-slate-500" />
-              <span>Sana:</span>
+              <span>Yozilgan Sana:</span>
             </div>
             <div className="font-black text-slate-900">
               {formatDate(entry.created_at)}
@@ -86,21 +86,25 @@ export const EntryDetailModal: React.FC<EntryDetailModalProps> = ({
 
           <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-300 shadow-2xs">
             <div className="flex items-center gap-1 text-slate-600 mb-0.5 font-bold">
-              <Clock className="w-3.5 h-3.5 text-violet-700" />
-              <span>Muddati:</span>
+              <User className="w-3.5 h-3.5 text-emerald-700" />
+              <span>To‘lovni Tasdiqlagan:</span>
             </div>
-            <div className="font-black text-slate-900">
-              {entry.due_date ? formatDate(entry.due_date) : 'Belgilanmagan'}
+            <div className={`font-black truncate ${entry.status === 'paid' ? 'text-emerald-800' : 'text-slate-400'}`}>
+              {entry.confirmed_by_name || entry.confirmer_profile?.full_name || (entry.status === 'paid' ? 'Muhammad' : 'Hali to‘lanmagan')}
             </div>
           </div>
 
           <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-300 shadow-2xs">
             <div className="flex items-center gap-1 text-slate-600 mb-0.5 font-bold">
-              <FileText className="w-3.5 h-3.5 text-slate-500" />
-              <span>Holat:</span>
+              <Clock className="w-3.5 h-3.5 text-slate-500" />
+              <span>{entry.status === 'paid' ? 'To‘langan Vaqt:' : 'To‘lov Muddati:'}</span>
             </div>
             <div className="font-black text-slate-900">
-              {entry.status === 'open' ? '🔴 Ochiq' : '🟢 To‘langan'}
+              {entry.status === 'paid' && entry.paid_at
+                ? formatDateTime(entry.paid_at)
+                : entry.due_date
+                ? formatDate(entry.due_date)
+                : 'Belgilanmagan'}
             </div>
           </div>
         </div>
