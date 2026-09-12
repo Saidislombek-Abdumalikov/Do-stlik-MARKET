@@ -78,6 +78,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
   const queryClient = useQueryClient();
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef<boolean>(false);
+  const inputTextRef = useRef<string>('');
   const aiTimerRef = useRef<any>(null);
   const dragControls = useDragControls();
 
@@ -348,13 +349,18 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
     }
   };
 
-  // Debounced AI parser on inputText change
+  // Keep inputTextRef synced with inputText
+  useEffect(() => {
+    inputTextRef.current = inputText;
+  }, [inputText]);
+
+  // Debounced AI parser on inputText change (active during typing, avoids duplicate triggers during speech)
   useEffect(() => {
     if (!inputText.trim()) {
       return;
     }
 
-    // Instant local preview
+    // Instant local regex preview (0ms latency)
     const localRes = parseTurboNasiyaText(inputText);
     if (localRes.transactions.length > 0) {
       const t = localRes.transactions[0];
@@ -372,18 +378,21 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
       }
     }
 
+    // If currently recording voice, do not fire Gemini AI on intermediate syllables
+    if (isListeningRef.current) return;
+
     // Debounced full Gemini AI parsing
     if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
     aiTimerRef.current = setTimeout(() => {
       runAiParse(inputText);
-    }, 750);
+    }, 850);
 
     return () => {
       if (aiTimerRef.current) clearTimeout(aiTimerRef.current);
     };
   }, [inputText]);
 
-  // Continuous Web Speech API Voice Recognition
+  // Clean Web Speech API Voice Recognition (Single utterance, stops cleanly without infinite beeping loops)
   const toggleSpeechRecognition = (target: 'nasiya' | 'qidirish') => {
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -393,6 +402,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
       return;
     }
 
+    // If already active, manually stop
     if (isListening) {
       isListeningRef.current = false;
       setIsListening(false);
@@ -407,42 +417,53 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
     try {
       const recognition = new SpeechRecognition();
       recognition.lang = 'uz-UZ';
-      recognition.continuous = true;
+      // Disable continuous to prevent mobile infinite restart & beeping loops
+      recognition.continuous = false;
       recognition.interimResults = true;
 
       isListeningRef.current = true;
       setIsListening(true);
 
+      const baseText = target === 'nasiya' ? inputTextRef.current : '';
+
       recognition.onresult = (event: any) => {
-        let fullTranscript = '';
-        for (let i = 0; i < event.results.length; i++) {
-          fullTranscript += event.results[i][0].transcript;
-        }
-        if (fullTranscript.trim()) {
-          if (target === 'nasiya') {
-            setInputText(fullTranscript);
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const item = event.results[i];
+          if (item.isFinal) {
+            finalTranscript += item[0].transcript + ' ';
           } else {
-            setSearchQuery(fullTranscript);
+            interimTranscript += item[0].transcript;
+          }
+        }
+
+        const combined = (baseText ? `${baseText} ` : '') + (finalTranscript + interimTranscript).trim();
+        if (combined.trim()) {
+          if (target === 'nasiya') {
+            setInputText(combined);
+          } else {
+            setSearchQuery(combined);
           }
         }
       };
 
       recognition.onerror = (event: any) => {
-        console.warn('Speech recognition error:', event.error);
+        console.warn('Speech recognition status/error:', event.error);
+        isListeningRef.current = false;
+        setIsListening(false);
         if (event.error === 'not-allowed') {
-          showToast('Mikrofon ruxsati berilmadi.', 'error');
-          isListeningRef.current = false;
-          setIsListening(false);
+          showToast('Mikrofon ruxsati berilmadi. Sozlamalardan mikrofonni yoqing.', 'error');
         }
       };
 
       recognition.onend = () => {
-        if (isListeningRef.current) {
-          try {
-            recognition.start();
-          } catch {}
-        } else {
-          setIsListening(false);
+        isListeningRef.current = false;
+        setIsListening(false);
+        // When speech finishes naturally, run AI parse once on complete utterance
+        if (target === 'nasiya' && inputTextRef.current.trim()) {
+          runAiParse(inputTextRef.current.trim());
         }
       };
 
@@ -781,7 +802,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                         onClick={() => toggleSpeechRecognition('nasiya')}
                         className={`p-2 rounded-xl transition-all cursor-pointer ${
                           isListening
-                            ? 'bg-rose-700 text-white animate-pulse shadow-md shadow-rose-700/50'
+                            ? 'bg-rose-700 text-white shadow-md shadow-rose-700/50'
                             : 'bg-slate-300 text-violet-800 hover:bg-slate-400 border border-slate-400/40'
                         }`}
                         title={isListening ? 'Eshitishni to‘xtatish' : 'Ovoz bilan aytish'}
@@ -791,29 +812,33 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                     </div>
                   </div>
 
-                  {/* Listening / Thinking feedback */}
-                  {isListening && (
-                    <div className="flex items-center justify-between px-3 text-rose-700 text-xs bg-rose-100/95 py-1.5 rounded-xl border border-rose-300 shrink-0">
-                      <div className="flex items-center gap-2 animate-pulse">
-                        <span className="w-2 h-2 rounded-full bg-rose-600" />
-                        <span className="font-bold">Eshitilmoqda... Bemalol o‘ylab gapiring</span>
+                  {/* Stable status line (zero layout trembling) */}
+                  <div className="min-h-[28px] flex items-center justify-between text-xs shrink-0 px-1">
+                    {isListening ? (
+                      <div className="flex items-center justify-between text-rose-700 bg-rose-100/90 border border-rose-300 px-3 py-1 rounded-xl w-full">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
+                          <span className="font-bold">Eshitilmoqda... Bemalol gapiring</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleSpeechRecognition('nasiya')}
+                          className="font-black text-rose-800 hover:underline cursor-pointer text-[11px]"
+                        >
+                          To‘xtatish
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => toggleSpeechRecognition('nasiya')}
-                        className="font-black underline ml-2 text-rose-800 cursor-pointer text-xs"
-                      >
-                        To‘xtatish
-                      </button>
-                    </div>
-                  )}
-
-                  {isAiThinking && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-100 border border-violet-300 rounded-xl text-violet-900 text-xs font-bold animate-pulse shrink-0">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-700" />
-                      <span>✨ Gemini AI matn va shevalarni tahlil qilmoqda...</span>
-                    </div>
-                  )}
+                    ) : isAiThinking ? (
+                      <div className="flex items-center gap-2 px-3 py-1 bg-violet-100 border border-violet-300 rounded-xl text-violet-900 text-xs font-bold w-full">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-700 shrink-0" />
+                        <span className="truncate">✨ Gemini AI tahlil qilmoqda...</span>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        💡 Masalan: "Olim akaga 100 ming" yoki mikrofonni bosing
+                      </span>
+                    )}
+                  </div>
 
                   {/* Spacious Form Fields Box */}
                   <div className="p-3.5 bg-slate-100 border border-slate-300 rounded-2xl space-y-2.5 shadow-2xs shrink-0">
@@ -1101,7 +1126,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                       onClick={() => toggleSpeechRecognition('qidirish')}
                       className={`p-2 rounded-xl transition-all shrink-0 cursor-pointer ${
                         isListening
-                          ? 'bg-rose-700 text-white animate-pulse shadow-md shadow-rose-700/50'
+                          ? 'bg-rose-700 text-white shadow-md shadow-rose-700/50'
                           : 'bg-slate-300 text-violet-800 hover:bg-slate-400 border border-slate-400/40'
                       }`}
                       title={isListening ? 'Eshitishni to‘xtatish' : 'Ovoz bilan qidirish'}
@@ -1110,21 +1135,28 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                     </button>
                   </div>
 
-                  {isListening && (
-                    <div className="flex items-center justify-between px-3 text-rose-700 text-xs bg-rose-100/95 py-1.5 rounded-xl border border-rose-300 shrink-0">
-                      <div className="flex items-center gap-2 animate-pulse">
-                        <span className="w-2 h-2 rounded-full bg-rose-600" />
-                        <span className="font-semibold">Gapiring: "50 ming", "qossob", "rosil" yoki mijoz ismini ayting...</span>
+                  {/* Stable search status line (zero layout trembling) */}
+                  <div className="min-h-[26px] flex items-center justify-between text-xs shrink-0 px-1">
+                    {isListening ? (
+                      <div className="flex items-center justify-between text-rose-700 bg-rose-100/90 border border-rose-300 px-3 py-0.5 rounded-xl w-full">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
+                          <span className="font-semibold">Ovoz bilan qidirilmoqda... Gapiring</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleSpeechRecognition('qidirish')}
+                          className="font-bold text-rose-800 hover:underline cursor-pointer text-[11px]"
+                        >
+                          To‘xtatish
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => toggleSpeechRecognition('qidirish')}
-                        className="font-bold underline ml-2 text-rose-800 cursor-pointer text-xs"
-                      >
-                        To‘xtatish
-                      </button>
-                    </div>
-                  )}
+                    ) : (
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        Mijoz ismi, laqabi (qassob, usta) yoki mahsulot nomi bo‘yicha
+                      </span>
+                    )}
+                  </div>
 
                   {/* Results Count */}
                   <div className="flex items-center justify-between text-xs text-slate-600 px-1 font-semibold shrink-0">
