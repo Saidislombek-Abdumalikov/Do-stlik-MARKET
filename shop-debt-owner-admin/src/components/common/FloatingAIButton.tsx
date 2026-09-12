@@ -489,7 +489,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="relative w-full max-w-md bg-slate-200 border-t border-slate-300 rounded-t-3xl p-3.5 shadow-2xl space-y-2 z-10 text-slate-900 max-h-[92vh] overflow-y-auto"
+              className="relative w-full max-w-md bg-slate-200 border-t border-slate-300 rounded-t-3xl p-3 shadow-2xl space-y-1.5 z-10 text-slate-900 max-h-[92vh]"
             >
               {/* Drag Handle Indicator */}
               <div className="w-8 h-1 rounded-full bg-slate-400 mx-auto -mt-0.5 mb-0.5" />
@@ -498,18 +498,18 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div
-                    className="w-7 h-7 rounded-xl flex items-center justify-center text-white shadow-md shadow-violet-700/20"
+                    className="w-6 h-6 rounded-xl flex items-center justify-center text-white shadow-md shadow-violet-700/20"
                     style={{
                       background: 'linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%)',
                     }}
                   >
-                    <Sparkles className="w-4 h-4 text-white" />
+                    <Sparkles className="w-3.5 h-3.5 text-white" />
                   </div>
                   <div>
                     <h3 className="text-xs font-black text-slate-900 leading-tight">
                       Do‘stlik AI Nasiya Yordamchisi
                     </h3>
-                    <p className="text-[10px] text-violet-800 font-bold flex items-center gap-1">
+                    <p className="text-[10px] text-violet-800 font-bold flex items-center gap-1 leading-none">
                       <span>Cheksiz Gemini AI</span>
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     </p>
@@ -519,7 +519,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="w-7 h-7 rounded-full bg-slate-300 hover:bg-slate-400 border border-slate-400/40 flex items-center justify-center text-slate-700 hover:text-slate-950 transition-colors cursor-pointer"
+                  className="w-6 h-6 rounded-full bg-slate-300 hover:bg-slate-400 border border-slate-400/40 flex items-center justify-center text-slate-700 hover:text-slate-950 transition-colors cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -537,13 +537,13 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                     setIsListening(false);
                     setActiveMode('nasiya');
                   }}
-                  className={`py-1.5 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-1 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     activeMode === 'nasiya'
                       ? 'bg-slate-100 text-violet-800 shadow-2xs border border-slate-300'
                       : 'text-slate-700 hover:text-slate-950'
                   }`}
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-violet-700" />
+                  <Sparkles className="w-3 h-3 text-violet-700" />
                   <span>Nasiya Yozish</span>
                 </button>
 
@@ -557,38 +557,38 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                     setIsListening(false);
                     setActiveMode('qidirish');
                   }}
-                  className={`py-1.5 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-1 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     activeMode === 'qidirish'
                       ? 'bg-slate-100 text-violet-800 shadow-2xs border border-slate-300'
                       : 'text-slate-700 hover:text-slate-950'
                   }`}
                 >
-                  <Search className="w-3.5 h-3.5 text-violet-700" />
+                  <Search className="w-3 h-3 text-violet-700" />
                   <span>Qidirish & To‘lash</span>
                 </button>
               </div>
 
               {/* MODE 1: NASIYA (ULTRA-COMPACT NO-SCROLL FORM) */}
               {activeMode === 'nasiya' && (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {/* Compact Omnibox / Speech Input */}
-                  <div className="relative bg-slate-100 border border-slate-300 rounded-xl p-2 focus-within:border-violet-600 focus-within:bg-white transition-all shadow-2xs">
+                  <div className="relative bg-slate-100 border border-slate-300 rounded-xl p-1.5 focus-within:border-violet-600 focus-within:bg-white transition-all shadow-2xs">
                     <textarea
                       rows={1}
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
-                      placeholder="Ovoz yoki matn: 'Abu qossopga 50 mingli go'sh, ertaga kechga'..."
-                      className="w-full bg-transparent text-xs text-slate-900 placeholder-slate-500 resize-none focus:outline-none pr-16 font-medium leading-tight"
+                      placeholder="Ovoz yoki matn: 'Abu qossopga 50 mingli go'sh, ertaga'..."
+                      className="w-full bg-transparent text-xs text-slate-900 placeholder-slate-500 resize-none focus:outline-none pr-16 font-medium leading-tight py-0.5"
                     />
 
                     {/* Compact Microphone & AI Button */}
-                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1">
                       {inputText.trim() && (
                         <button
                           type="button"
                           onClick={() => runAiParse(inputText)}
                           disabled={isAiThinking}
-                          className="px-1.5 py-1 rounded-lg bg-violet-100 hover:bg-violet-200 text-violet-800 border border-violet-300 text-[10px] font-black cursor-pointer flex items-center gap-0.5"
+                          className="px-1.5 py-0.5 rounded-md bg-violet-100 hover:bg-violet-200 text-violet-800 border border-violet-300 text-[10px] font-black cursor-pointer flex items-center gap-0.5"
                           title="AI Tahlil"
                         >
                           <Sparkles className="w-2.5 h-2.5 text-violet-700" />
@@ -598,7 +598,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                       <button
                         type="button"
                         onClick={() => toggleSpeechRecognition('nasiya')}
-                        className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                        className={`p-1 rounded-lg transition-all cursor-pointer ${
                           isListening
                             ? 'bg-rose-700 text-white animate-pulse shadow-md shadow-rose-700/50'
                             : 'bg-slate-300 text-violet-800 hover:bg-slate-400 border border-slate-400/40'
@@ -612,7 +612,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
                   {/* Listening / Thinking feedback */}
                   {isListening && (
-                    <div className="flex items-center justify-between px-2 text-rose-700 text-[10px] bg-rose-100/90 py-1 rounded-lg border border-rose-300">
+                    <div className="flex items-center justify-between px-2 text-rose-700 text-[10px] bg-rose-100/90 py-0.5 rounded-lg border border-rose-300">
                       <div className="flex items-center gap-1.5 animate-pulse">
                         <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
                         <span className="font-bold">Eshitilmoqda... Bemalol o‘ylab gapiring</span>
@@ -628,18 +628,18 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                   )}
 
                   {isAiThinking && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-violet-100 border border-violet-300 rounded-lg text-violet-900 text-[11px] font-bold animate-pulse">
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-violet-100 border border-violet-300 rounded-lg text-violet-900 text-[10.5px] font-bold animate-pulse">
                       <Loader2 className="w-3 h-3 animate-spin text-violet-700" />
-                      <span>✨ Gemini AI matn va shevalarni tahlil qilmoqda...</span>
+                      <span>✨ Gemini AI tahlil qilmoqda...</span>
                     </div>
                   )}
 
                   {/* Compact Form Fields Box */}
-                  <div className="p-2.5 bg-slate-100 border border-slate-300 rounded-xl space-y-2 shadow-2xs">
+                  <div className="p-2 bg-slate-100 border border-slate-300 rounded-xl space-y-1.5 shadow-2xs">
                     {/* Row 1: Name and Amount */}
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[10px] font-black text-slate-800 flex items-center gap-1">
+                        <label className="text-[9.5px] font-black text-slate-800 flex items-center gap-1">
                           <User className="w-2.5 h-2.5 text-slate-500" />
                           <span>Mijoz ismi *</span>
                         </label>
@@ -648,12 +648,12 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                           value={editCustomerName}
                           onChange={(e) => setEditCustomerName(e.target.value)}
                           placeholder="Akmal aka"
-                          className="w-full mt-0.5 px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-bold transition-colors shadow-2xs"
+                          className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-bold transition-colors shadow-2xs"
                         />
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-black text-slate-800 flex items-center gap-1">
+                        <label className="text-[9.5px] font-black text-slate-800 flex items-center gap-1">
                           <span>Summa (so‘m) *</span>
                         </label>
                         <input
@@ -666,7 +666,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                           }}
                           onWheel={(e) => (e.target as HTMLElement).blur()}
                           placeholder="49 000"
-                          className="w-full mt-0.5 px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-black transition-colors shadow-2xs"
+                          className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-black transition-colors shadow-2xs"
                         />
                       </div>
                     </div>
@@ -674,7 +674,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                     {/* Row 2: Items and Phone (Optional) */}
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[10px] font-black text-slate-800 flex items-center gap-1">
+                        <label className="text-[9.5px] font-black text-slate-800 flex items-center gap-1">
                           <Package className="w-2.5 h-2.5 text-slate-500" />
                           <span>Mahsulotlar</span>
                         </label>
@@ -683,12 +683,12 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                           value={editItems}
                           onChange={(e) => setEditItems(e.target.value)}
                           placeholder="2 ta non, go‘sht..."
-                          className="w-full mt-0.5 px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-medium transition-colors shadow-2xs"
+                          className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-medium transition-colors shadow-2xs"
                         />
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-black text-slate-800 flex items-center gap-1">
+                        <label className="text-[9.5px] font-black text-slate-800 flex items-center gap-1">
                           <Phone className="w-2.5 h-2.5 text-slate-500" />
                           <span>Telefon (ixtiyoriy)</span>
                         </label>
@@ -697,14 +697,14 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                           value={editPhone}
                           onChange={(e) => setEditPhone(e.target.value)}
                           placeholder="90 123 45 67"
-                          className="w-full mt-0.5 px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-medium transition-colors shadow-2xs"
+                          className="w-full mt-0.5 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-medium transition-colors shadow-2xs"
                         />
                       </div>
                     </div>
 
                     {/* Row 3: Qaytarish vaqti chips */}
                     <div className="flex items-center justify-between gap-1 pt-0.5">
-                      <span className="text-[10px] font-black text-slate-700 flex items-center gap-1 flex-shrink-0">
+                      <span className="text-[9.5px] font-black text-slate-700 flex items-center gap-1 flex-shrink-0">
                         <Clock className="w-2.5 h-2.5 text-violet-700" />
                         <span>Muddat:</span>
                       </span>
@@ -741,12 +741,12 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                           setDueDate(e.target.value);
                           setEditDueCondition(e.target.value);
                         }}
-                        className="w-full px-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-violet-700"
+                        className="w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-violet-700"
                       />
                     )}
 
                     {/* Row 4: Auto timestamp indicator */}
-                    <div className="flex items-center justify-between text-[10px] text-slate-600 bg-slate-200/80 px-2 py-1 rounded-lg border border-slate-300">
+                    <div className="flex items-center justify-between text-[9.5px] text-slate-600 bg-slate-200/80 px-2 py-0.5 rounded-lg border border-slate-300">
                       <span className="flex items-center gap-1 font-medium">
                         <Clock className="w-2.5 h-2.5 text-violet-700" />
                         <span>Yozilish: Shu lahzada ({new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })})</span>
@@ -761,7 +761,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                       type="button"
                       disabled={isSaving || !editCustomerName.trim() || !editAmount || Number(editAmount) <= 0}
                       onClick={handleDirectSave}
-                      className="w-full py-2.5 px-3 bg-violet-700 hover:bg-violet-800 active:bg-violet-900 disabled:opacity-40 text-white rounded-xl font-black text-xs shadow-md shadow-violet-900/25 border border-violet-800/50 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="w-full py-2 px-3 bg-violet-700 hover:bg-violet-800 active:bg-violet-900 disabled:opacity-40 text-white rounded-xl font-black text-xs shadow-md shadow-violet-900/25 border border-violet-800/50 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       {isSaving ? (
                         <>

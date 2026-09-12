@@ -92,7 +92,7 @@ export const EntryPaymentModal: React.FC<EntryPaymentModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Qarzni To‘lash / O‘chirish" maxWidth="md">
+    <Modal isOpen={isOpen} onClose={onClose} title="Qarzni To‘lash" maxWidth="md">
       <form onSubmit={handleSubmit} className="space-y-4 text-xs">
         {/* Customer & Debt Overview Card */}
         <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-start justify-between">
