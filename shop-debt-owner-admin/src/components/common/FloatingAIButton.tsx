@@ -483,19 +483,19 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
               className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
             />
 
-            {/* Sheet Container: Taller & more spacious pop-up screen that fits viewport with zero scrolling */}
+            {/* Sheet Container: Tall, expansive pop-up screen (~82vh) with zero scrolling */}
             <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="relative w-full max-w-md bg-slate-200 border-t border-slate-300 rounded-t-3xl p-4 shadow-2xl space-y-2.5 z-10 text-slate-900 max-h-[92vh]"
+              className="relative w-full max-w-md bg-slate-200 border-t border-slate-300 rounded-t-3xl p-4 sm:p-5 shadow-2xl z-10 text-slate-900 min-h-[570px] max-h-[85vh] flex flex-col justify-between overflow-hidden"
             >
               {/* Drag Handle Indicator */}
-              <div className="w-10 h-1.5 rounded-full bg-slate-400 mx-auto -mt-1 mb-1" />
+              <div className="w-12 h-1.5 rounded-full bg-slate-400 mx-auto -mt-1 mb-1.5 shrink-0" />
 
               {/* Header */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between shrink-0 mb-1">
                 <div className="flex items-center gap-2.5">
                   <div
                     className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-md shadow-violet-700/20"
@@ -526,7 +526,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
               </div>
 
               {/* 2 Options Segmented Control: Nasiya Yozish vs Qidirish & To'lash */}
-              <div className="grid grid-cols-2 p-1 bg-slate-300/80 border border-slate-400/50 rounded-xl gap-1">
+              <div className="grid grid-cols-2 p-1 bg-slate-300/80 border border-slate-400/50 rounded-xl gap-1 shrink-0 mb-1">
                 <button
                   type="button"
                   onClick={() => {
@@ -537,7 +537,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                     setIsListening(false);
                     setActiveMode('nasiya');
                   }}
-                  className={`py-1.5 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-2 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     activeMode === 'nasiya'
                       ? 'bg-slate-100 text-violet-800 shadow-2xs border border-slate-300'
                       : 'text-slate-700 hover:text-slate-950'
@@ -557,7 +557,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                     setIsListening(false);
                     setActiveMode('qidirish');
                   }}
-                  className={`py-1.5 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-2 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     activeMode === 'qidirish'
                       ? 'bg-slate-100 text-violet-800 shadow-2xs border border-slate-300'
                       : 'text-slate-700 hover:text-slate-950'
@@ -568,21 +568,21 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                 </button>
               </div>
 
-              {/* MODE 1: NASIYA (COMFORTABLE TALL FORM, ZERO SCROLL) */}
+              {/* MODE 1: NASIYA (TALL EXPANSIVE FORM, ZERO SCROLL) */}
               {activeMode === 'nasiya' && (
-                <div className="space-y-2">
+                <div className="flex-1 flex flex-col justify-between space-y-2.5 pt-0.5 min-h-0">
                   {/* Omnibox / Speech Input */}
-                  <div className="relative bg-slate-100 border border-slate-300 rounded-xl p-2 focus-within:border-violet-600 focus-within:bg-white transition-all shadow-2xs">
+                  <div className="relative bg-slate-100 border border-slate-300 rounded-2xl p-2.5 focus-within:border-violet-600 focus-within:bg-white transition-all shadow-2xs shrink-0">
                     <textarea
-                      rows={1}
+                      rows={2}
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
-                      placeholder="Ovoz yoki matn: 'Abu qossopga 50 mingli go'sh, ertaga'..."
-                      className="w-full bg-transparent text-xs text-slate-900 placeholder-slate-500 resize-none focus:outline-none pr-20 font-medium leading-tight py-1"
+                      placeholder="Ovoz yoki matn: 'Abu qossopga 50 mingli go'sh, ertaga kechga'..."
+                      className="w-full bg-transparent text-xs text-slate-900 placeholder-slate-500 resize-none focus:outline-none pr-20 font-medium leading-relaxed"
                     />
 
                     {/* Microphone & AI Button */}
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
                       {inputText.trim() && (
                         <button
                           type="button"
@@ -612,7 +612,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
                   {/* Listening / Thinking feedback */}
                   {isListening && (
-                    <div className="flex items-center justify-between px-3 text-rose-700 text-xs bg-rose-100/95 py-1.5 rounded-xl border border-rose-300">
+                    <div className="flex items-center justify-between px-3 text-rose-700 text-xs bg-rose-100/95 py-1.5 rounded-xl border border-rose-300 shrink-0">
                       <div className="flex items-center gap-2 animate-pulse">
                         <span className="w-2 h-2 rounded-full bg-rose-600" />
                         <span className="font-bold">Eshitilmoqda... Bemalol o‘ylab gapiring</span>
@@ -628,19 +628,19 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                   )}
 
                   {isAiThinking && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-100 border border-violet-300 rounded-xl text-violet-900 text-xs font-bold animate-pulse">
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-100 border border-violet-300 rounded-xl text-violet-900 text-xs font-bold animate-pulse shrink-0">
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-700" />
-                      <span>✨ Gemini AI tahlil qilmoqda...</span>
+                      <span>✨ Gemini AI matn va shevalarni tahlil qilmoqda...</span>
                     </div>
                   )}
 
                   {/* Spacious Form Fields Box */}
-                  <div className="p-3 bg-slate-100 border border-slate-300 rounded-2xl space-y-2 shadow-2xs">
+                  <div className="p-3.5 bg-slate-100 border border-slate-300 rounded-2xl space-y-2.5 shadow-2xs shrink-0">
                     {/* Row 1: Name and Amount */}
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                          <User className="w-3 h-3 text-slate-500" />
+                          <User className="w-3.5 h-3.5 text-slate-500" />
                           <span>Mijoz ismi *</span>
                         </label>
                         <input
@@ -648,7 +648,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                           value={editCustomerName}
                           onChange={(e) => setEditCustomerName(e.target.value)}
                           placeholder="Akmal aka"
-                          className="w-full mt-1 px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-bold transition-colors shadow-2xs"
+                          className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-bold transition-colors shadow-2xs"
                         />
                       </div>
 
@@ -666,16 +666,16 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                           }}
                           onWheel={(e) => (e.target as HTMLElement).blur()}
                           placeholder="49 000"
-                          className="w-full mt-1 px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-black transition-colors shadow-2xs"
+                          className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-sm font-black transition-colors shadow-2xs"
                         />
                       </div>
                     </div>
 
                     {/* Row 2: Items and Phone (Optional) */}
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                          <Package className="w-3 h-3 text-slate-500" />
+                          <Package className="w-3.5 h-3.5 text-slate-500" />
                           <span>Mahsulotlar</span>
                         </label>
                         <input
@@ -683,13 +683,13 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                           value={editItems}
                           onChange={(e) => setEditItems(e.target.value)}
                           placeholder="2 ta non, go‘sht..."
-                          className="w-full mt-1 px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-medium transition-colors shadow-2xs"
+                          className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-medium transition-colors shadow-2xs"
                         />
                       </div>
 
                       <div>
                         <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                          <Phone className="w-3 h-3 text-slate-500" />
+                          <Phone className="w-3.5 h-3.5 text-slate-500" />
                           <span>Telefon (ixtiyoriy)</span>
                         </label>
                         <input
@@ -697,7 +697,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                           value={editPhone}
                           onChange={(e) => setEditPhone(e.target.value)}
                           placeholder="90 123 45 67"
-                          className="w-full mt-1 px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-medium transition-colors shadow-2xs"
+                          className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-medium transition-colors shadow-2xs"
                         />
                       </div>
                     </div>
@@ -705,7 +705,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                     {/* Row 3: Qaytarish vaqti chips */}
                     <div className="flex items-center justify-between gap-1.5 pt-1">
                       <span className="text-xs font-black text-slate-800 flex items-center gap-1 shrink-0">
-                        <Clock className="w-3 h-3 text-violet-700" />
+                        <Clock className="w-3.5 h-3.5 text-violet-700" />
                         <span>Muddat:</span>
                       </span>
 
@@ -741,50 +741,50 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                           setDueDate(e.target.value);
                           setEditDueCondition(e.target.value);
                         }}
-                        className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-violet-700 shadow-2xs"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-violet-700 shadow-2xs"
                       />
                     )}
 
                     {/* Row 4: Auto timestamp indicator */}
                     <div className="flex items-center justify-between text-xs text-slate-600 bg-slate-200/80 px-3 py-1.5 rounded-xl border border-slate-300">
                       <span className="flex items-center gap-1.5 font-medium">
-                        <Clock className="w-3 h-3 text-violet-700" />
+                        <Clock className="w-3.5 h-3.5 text-violet-700" />
                         <span>Yozilish: Shu lahzada ({new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })})</span>
                       </span>
                       <span className="font-black text-violet-900">
                         {dueType === 'tomorrow' ? 'Ertaga' : dueType === 'today' ? 'Bugun' : dueType === '3days' ? '3 kunda' : dueType === '1week' ? '1 haftada' : dueDate}
                       </span>
                     </div>
-
-                    {/* Prominent Direct Save Button */}
-                    <button
-                      type="button"
-                      disabled={isSaving || !editCustomerName.trim() || !editAmount || Number(editAmount) <= 0}
-                      onClick={handleDirectSave}
-                      className="w-full py-2.5 px-4 bg-violet-700 hover:bg-violet-800 active:bg-violet-900 disabled:opacity-40 text-white rounded-xl font-black text-xs shadow-md shadow-violet-900/25 border border-violet-800/50 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      {isSaving ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Daftarga yozilmoqda...</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Daftarga yozish {Number(editAmount) > 0 ? `(${formatMoney(Number(editAmount))})` : ''}</span>
-                        </>
-                      )}
-                    </button>
                   </div>
+
+                  {/* Prominent Direct Save Button */}
+                  <button
+                    type="button"
+                    disabled={isSaving || !editCustomerName.trim() || !editAmount || Number(editAmount) <= 0}
+                    onClick={handleDirectSave}
+                    className="w-full py-3 px-4 bg-violet-700 hover:bg-violet-800 active:bg-violet-900 disabled:opacity-40 text-white rounded-2xl font-black text-sm shadow-lg shadow-violet-900/30 border border-violet-800/50 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] shrink-0"
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Daftarga yozilmoqda...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Daftarga yozish {Number(editAmount) > 0 ? `(${formatMoney(Number(editAmount))})` : ''}</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
 
               {/* MODE 2: QIDIRISH & TO'LASH (VOICE / TEXT SEARCH) */}
               {activeMode === 'qidirish' && (
-                <div className="space-y-2">
+                <div className="flex-1 flex flex-col space-y-2.5 pt-0.5 min-h-0">
                   {/* Search Omnibox */}
-                  <div className="relative bg-slate-100 border border-slate-300 rounded-xl p-2 flex items-center gap-2 focus-within:border-violet-600 focus-within:bg-white transition-all shadow-2xs">
-                    <Search className="w-3.5 h-3.5 text-slate-500 ml-0.5 shrink-0" />
+                  <div className="relative bg-slate-100 border border-slate-300 rounded-2xl p-2.5 flex items-center gap-2 focus-within:border-violet-600 focus-within:bg-white transition-all shadow-2xs shrink-0">
+                    <Search className="w-4 h-4 text-slate-500 ml-0.5 shrink-0" />
                     <input
                       type="text"
                       value={searchQuery}
@@ -799,7 +799,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                         onClick={() => setSearchQuery('')}
                         className="p-1 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
                       >
-                        <X className="w-3 h-3" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     )}
 
@@ -807,27 +807,27 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                     <button
                       type="button"
                       onClick={() => toggleSpeechRecognition('qidirish')}
-                      className={`p-1.5 rounded-lg transition-all shrink-0 cursor-pointer ${
+                      className={`p-2 rounded-xl transition-all shrink-0 cursor-pointer ${
                         isListening
                           ? 'bg-rose-700 text-white animate-pulse shadow-md shadow-rose-700/50'
                           : 'bg-slate-300 text-violet-800 hover:bg-slate-400 border border-slate-400/40'
                       }`}
                       title={isListening ? 'Eshitishni to‘xtatish' : 'Ovoz bilan qidirish'}
                     >
-                      {isListening ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
+                      {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                     </button>
                   </div>
 
                   {isListening && (
-                    <div className="flex items-center justify-between px-2 text-rose-700 text-[10px] bg-rose-100/90 py-1 rounded-lg border border-rose-300">
-                      <div className="flex items-center gap-1.5 animate-pulse">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
+                    <div className="flex items-center justify-between px-3 text-rose-700 text-xs bg-rose-100/95 py-1.5 rounded-xl border border-rose-300 shrink-0">
+                      <div className="flex items-center gap-2 animate-pulse">
+                        <span className="w-2 h-2 rounded-full bg-rose-600" />
                         <span className="font-semibold">Gapiring: "50 ming", "qossob", "rosil" yoki mijoz ismini ayting...</span>
                       </div>
                       <button
                         type="button"
                         onClick={() => toggleSpeechRecognition('qidirish')}
-                        className="font-bold underline ml-2 text-rose-800 cursor-pointer"
+                        className="font-bold underline ml-2 text-rose-800 cursor-pointer text-xs"
                       >
                         To‘xtatish
                       </button>
@@ -835,7 +835,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                   )}
 
                   {/* Results Count */}
-                  <div className="flex items-center justify-between text-[11px] text-slate-600 px-1 font-semibold">
+                  <div className="flex items-center justify-between text-xs text-slate-600 px-1 font-semibold shrink-0">
                     <span>
                       {searchQuery
                         ? `Topilgan qarzlar: ${matchingEntries.length} ta`
@@ -854,22 +854,22 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
                   {/* Matching Entries List */}
                   {isLoadingEntries ? (
-                    <div className="py-6 flex justify-center text-slate-500">
-                      <Loader2 className="w-4 h-4 animate-spin text-violet-700" />
+                    <div className="flex-1 flex justify-center items-center text-slate-500 py-6">
+                      <Loader2 className="w-5 h-5 animate-spin text-violet-700" />
                     </div>
                   ) : matchingEntries.length === 0 ? (
-                    <div className="py-6 text-center text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl border border-slate-300">
+                    <div className="flex-1 flex justify-center items-center text-center text-xs font-semibold text-slate-600 bg-slate-100 rounded-2xl border border-slate-300 p-6">
                       "{searchQuery}" bo‘yicha qarz topilmadi.
                     </div>
                   ) : (
-                    <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                    <div className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
                       {matchingEntries.map((entry) => {
                         const isOpen = entry.status === 'open';
 
                         return (
                           <div
                             key={entry.id}
-                            className={`p-2.5 bg-slate-50 border rounded-xl space-y-1.5 transition-all shadow-2xs ${
+                            className={`p-3 bg-slate-50 border rounded-2xl space-y-2 transition-all shadow-2xs ${
                               isOpen ? 'border-rose-300/90' : 'border-emerald-300/90'
                             }`}
                           >
@@ -911,17 +911,17 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
                             {/* Quick Action Button: Only To'lash (Users cannot delete records) */}
                             {isOpen && (
-                              <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-200">
+                              <div className="flex items-center justify-end gap-2 pt-1.5 border-t border-slate-200">
                                 <button
                                   type="button"
                                   disabled={isSettlingId === entry.id}
                                   onClick={() => handleSettleEntry(entry)}
-                                  className="px-2.5 py-1 text-[11px] font-black text-white bg-emerald-700 hover:bg-emerald-800 border border-emerald-800 rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50 cursor-pointer shadow-2xs"
+                                  className="px-3 py-1.5 text-xs font-black text-white bg-emerald-700 hover:bg-emerald-800 border border-emerald-800 rounded-xl transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-2xs"
                                 >
                                   {isSettlingId === entry.id ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                   ) : (
-                                    <Check className="w-3 h-3" />
+                                    <Check className="w-3.5 h-3.5" />
                                   )}
                                   <span>To‘lash</span>
                                 </button>
