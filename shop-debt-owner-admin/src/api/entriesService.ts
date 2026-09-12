@@ -40,6 +40,15 @@ const getStored = <T>(key: string, initial: T): T => {
       localStorage.setItem(key, JSON.stringify(initial));
       return initial;
     }
+    if (key === STORAGE_ENTRIES && Array.isArray(initial) && Array.isArray(parsed)) {
+      const existingIds = new Set(parsed.map((e: any) => e.id));
+      const missing = (initial as any[]).filter((e) => !existingIds.has(e.id));
+      if (missing.length > 0) {
+        const merged = [...parsed, ...missing];
+        localStorage.setItem(key, JSON.stringify(merged));
+        return merged as T;
+      }
+    }
     return parsed;
   } catch {
     localStorage.setItem(key, JSON.stringify(initial));
@@ -935,13 +944,13 @@ export const entriesService = {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Group by customer party_name
     const groups: Record<
       string,
       {
         name: string;
         phone: string | null;
         openDebt: number;
+        paidDebt: number;
         openCount: number;
         paidCount: number;
         latestDate: string;
@@ -950,13 +959,22 @@ export const entriesService = {
       }
     > = {};
 
-    allEntries.forEach((entry) => {
+    const profiles = isSupabaseConfigured() ? [] : getStored<Profile[]>(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
+
+    allEntries.forEach((rawEntry) => {
+      const entry: Entry = {
+        ...rawEntry,
+        creator_profile: profiles.find((p) => p.id === rawEntry.created_by) || rawEntry.creator_profile || null,
+        confirmer_profile: profiles.find((p) => p.id === rawEntry.confirmed_by) || rawEntry.confirmer_profile || null,
+      };
+
       const key = entry.party_name.trim().toLowerCase();
       if (!groups[key]) {
         groups[key] = {
           name: entry.party_name.trim(),
           phone: entry.party_phone || null,
           openDebt: 0,
+          paidDebt: 0,
           openCount: 0,
           paidCount: 0,
           latestDate: entry.created_at,
@@ -987,6 +1005,7 @@ export const entriesService = {
         }
       } else if (entry.status === 'paid') {
         g.paidCount++;
+        g.paidDebt += Number(entry.amount) || 0;
       }
     });
 
@@ -1013,6 +1032,7 @@ export const entriesService = {
         customer_name: g.name,
         customer_phone: g.phone,
         total_debt: g.openDebt,
+        total_paid: g.paidDebt,
         open_entries_count: g.openCount,
         paid_entries_count: g.paidCount,
         latest_entry_date: g.latestDate,

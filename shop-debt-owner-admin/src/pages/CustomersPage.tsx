@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { entriesService } from '../api/entriesService';
-import { CustomerSortOption } from '../types/database';
+import { CustomerSortOption, CustomerSummary, Entry } from '../types/database';
 import { formatMoney, formatDate } from '../utils/formatters';
 import { TableSkeleton } from '../components/common/Skeleton';
+import { CustomerLedgerModal } from '../components/customers/CustomerLedgerModal';
+import { EntryPaymentModal } from '../components/entries/EntryPaymentModal';
 import {
   Search,
   Users,
@@ -13,19 +15,24 @@ import {
   Clock,
   ArrowUpDown,
   RotateCcw,
-  ChevronDown,
-  ChevronUp,
+  PlusCircle,
+  BookOpen,
 } from 'lucide-react';
 
 interface CustomersPageProps {
   onViewCustomerEntries?: (customerName: string) => void;
+  onOpenNewDebtForCustomer?: (customerName: string, customerPhone?: string | null) => void;
 }
 
-export const CustomersPage: React.FC<CustomersPageProps> = ({ onViewCustomerEntries }) => {
+export const CustomersPage: React.FC<CustomersPageProps> = ({
+  onViewCustomerEntries: _onViewCustomerEntries,
+  onOpenNewDebtForCustomer,
+}) => {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<CustomerSortOption>('highest');
   const [onlyOverdue, setOnlyOverdue] = useState(false);
-  const [expandedCustomerName, setExpandedCustomerName] = useState<string | null>(null);
+  const [selectedCustomerForLedger, setSelectedCustomerForLedger] = useState<CustomerSummary | null>(null);
+  const [payingEntry, setPayingEntry] = useState<Entry | null>(null);
 
   const { data: customers = [], isLoading } = useQuery({
     queryKey: ['customers', sortBy, search],
@@ -134,26 +141,30 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({ onViewCustomerEntr
       ) : (
         <div className="space-y-2.5">
           {filteredCustomers.map((cust) => {
-            const isExpanded = expandedCustomerName === cust.customer_name;
-
             return (
               <div
                 key={cust.customer_name}
-                className="p-3.5 bg-slate-100 border border-slate-300 rounded-2xl space-y-2.5 shadow-xs transition-all hover:border-violet-400"
+                onClick={() => setSelectedCustomerForLedger(cust)}
+                className="p-3.5 bg-slate-100 border border-slate-300 hover:border-violet-400 rounded-2xl space-y-2.5 shadow-xs transition-all cursor-pointer hover:shadow-sm"
               >
                 {/* Header info */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-black text-slate-900 text-sm truncate">
-                      {cust.customer_name}
-                    </h3>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-violet-600 to-purple-600 text-white font-black text-xs flex items-center justify-center shadow-xs">
+                        <Users className="w-3.5 h-3.5" />
+                      </div>
+                      <h3 className="font-black text-slate-900 text-sm truncate">
+                        {cust.customer_name}
+                      </h3>
+                    </div>
                     {cust.customer_phone ? (
-                      <div className="flex items-center gap-1 text-[11px] text-slate-600 mt-0.5 font-mono font-bold">
+                      <div className="flex items-center gap-1 text-[11px] text-slate-600 mt-1 font-mono font-bold ml-8">
                         <Phone className="w-3 h-3 text-slate-500" />
                         <span>{cust.customer_phone}</span>
                       </div>
                     ) : (
-                      <span className="text-[10px] text-slate-500 font-medium">Telefon kiritilmagan</span>
+                      <span className="text-[10px] text-slate-500 font-medium ml-8 block">Telefon kiritilmagan</span>
                     )}
                   </div>
 
@@ -161,9 +172,12 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({ onViewCustomerEntr
                     <div className="font-black text-sm text-rose-700">
                       {formatMoney(cust.total_debt)}
                     </div>
-                    <span className="text-[10.5px] text-slate-600 block mt-0.5 font-bold">
-                      {cust.open_entries_count} ta ochiq nasiya
-                    </span>
+                    <div className="text-[10.5px] text-slate-600 mt-0.5 font-bold flex items-center justify-end gap-1">
+                      <span>{cust.open_entries_count} ta ochiq</span>
+                      {cust.paid_entries_count > 0 && (
+                        <span className="text-emerald-700 font-black">• {cust.paid_entries_count} ta yopilgan</span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -231,85 +245,76 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({ onViewCustomerEntr
                       <span className="text-slate-500 font-medium">Muddat belgilanmagan</span>
                     )}
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedCustomerName(isExpanded ? null : cust.customer_name)
-                      }
-                      className="text-xs font-bold text-violet-800 hover:text-violet-950 flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <span>{isExpanded ? 'Yopish' : 'Nasiyalari'}</span>
-                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                    </button>
+                    <span className="text-[10.5px] font-bold text-violet-800">
+                      Jami {cust.entries.length} ta xarid
+                    </span>
                   </div>
                 )}
 
-                {/* If overdue or today, keep the expand toggle available */}
-                {(cust.is_overdue || cust.days_remaining === 0) && (
-                  <div className="flex justify-end pt-1">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedCustomerName(isExpanded ? null : cust.customer_name)
-                      }
-                      className="text-[11px] font-bold text-slate-600 hover:text-slate-900 flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <span>{isExpanded ? 'Nasiyalarni yopish' : 'Nasiyalar ro‘yxati'}</span>
-                      {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                    </button>
-                  </div>
-                )}
+                {/* Card Footer: Quick Actions */}
+                <div
+                  className="flex items-center justify-between pt-2 border-t border-slate-200 text-xs"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCustomerForLedger(cust)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-900 border border-slate-300 rounded-xl font-black transition-colors cursor-pointer"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-violet-700" />
+                    <span>Nasiyalari ({cust.entries.length})</span>
+                  </button>
 
-                {/* Expandable Mini Ledger of Debts */}
-                {isExpanded && (
-                  <div className="pt-2 border-t border-slate-200 space-y-1.5">
-                    <div className="text-[11px] font-bold text-slate-700 mb-1 flex items-center justify-between">
-                      <span>Mijozning nasiyalari:</span>
-                      {onViewCustomerEntries && (
-                        <button
-                          type="button"
-                          onClick={() => onViewCustomerEntries(cust.customer_name)}
-                          className="text-violet-800 hover:text-violet-950 font-black hover:underline cursor-pointer"
-                        >
-                          Qarzlarda ochish →
-                        </button>
-                      )}
-                    </div>
-                    {cust.entries.map((entry) => (
-                      <div
-                        key={entry.id}
-                        className="p-2 bg-slate-200/60 rounded-xl border border-slate-300 flex items-center justify-between text-[11px]"
+                  <div className="flex items-center gap-1.5">
+                    {onOpenNewDebtForCustomer && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenNewDebtForCustomer(cust.customer_name, cust.customer_phone)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-violet-700 hover:bg-violet-800 text-white rounded-xl font-black transition-all cursor-pointer active:scale-95 shadow-xs"
+                        title="Shu mijozga yangi qarz yozish"
                       >
-                        <div className="min-w-0 flex-1 pr-2">
-                          <div className="text-slate-900 font-bold truncate">
-                            {entry.description || 'Nasiya xaridi'}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-medium">
-                            {formatDate(entry.created_at)}
-                            {entry.due_date && ` • Muddat: ${formatDate(entry.due_date)}`}
-                          </div>
-                        </div>
-
-                        <div className="text-right flex-shrink-0">
-                          <span
-                            className={`font-black ${
-                              entry.status === 'open' ? 'text-rose-700' : 'text-slate-500 line-through'
-                            }`}
-                          >
-                            {formatMoney(entry.amount)}
-                          </span>
-                          <span className="block text-[9.5px] text-slate-500 font-bold uppercase">
-                            {entry.status === 'open' ? 'Ochiq' : 'To‘langan'}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        <span>+ Qarz yozish</span>
+                      </button>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             );
           })}
         </div>
+      )}
+
+      {/* Full Customer Ledger Modal */}
+      {selectedCustomerForLedger && (
+        <CustomerLedgerModal
+          isOpen={!!selectedCustomerForLedger}
+          onClose={() => setSelectedCustomerForLedger(null)}
+          customer={selectedCustomerForLedger}
+          onAddDebt={(name, phone) => {
+            onOpenNewDebtForCustomer?.(name, phone);
+            setSelectedCustomerForLedger(null);
+          }}
+          onPayEntry={(entry) => setPayingEntry(entry)}
+        />
+      )}
+
+      {/* Payment Settlement Modal */}
+      {payingEntry && (
+        <EntryPaymentModal
+          isOpen={!!payingEntry}
+          onClose={() => {
+            setPayingEntry(null);
+            // Refresh ledger modal if open
+            if (selectedCustomerForLedger) {
+              const updatedCust = customers.find(
+                (c) => c.customer_name === selectedCustomerForLedger.customer_name
+              );
+              if (updatedCust) setSelectedCustomerForLedger(updatedCust);
+            }
+          }}
+          entry={payingEntry}
+        />
       )}
     </div>
   );

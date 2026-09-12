@@ -120,6 +120,7 @@ export interface CustomerSummary {
   customer_name: string;
   customer_phone: string | null;
   total_debt: number;
+  total_paid?: number;
   open_entries_count: number;
   paid_entries_count: number;
   latest_entry_date: string;

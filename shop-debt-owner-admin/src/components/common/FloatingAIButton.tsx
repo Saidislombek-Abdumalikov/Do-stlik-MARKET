@@ -14,6 +14,7 @@ import {
   User,
   Phone,
   Check,
+  Users,
 } from 'lucide-react';
 import {
   parseTurboNasiyaText,
@@ -24,7 +25,7 @@ import {
 import { parseNasiyaWithGemini } from '../../api/geminiService';
 import { formatMoney, formatDate } from '../../utils/formatters';
 import { entriesService } from '../../api/entriesService';
-import { Entry } from '../../types/database';
+import { Entry, CustomerSummary } from '../../types/database';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../common/Toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -36,6 +37,7 @@ interface FloatingAIButtonProps {
   onClose?: () => void;
   onNavigate?: (tab: NavTab, prefillTurboText?: string) => void;
   showFloatingTrigger?: boolean;
+  prefillCustomer?: { name: string; phone?: string | null } | null;
 }
 
 export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
@@ -44,6 +46,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
   onClose: externalOnClose,
   onNavigate: _onNavigate,
   showFloatingTrigger = false,
+  prefillCustomer = null,
 }) => {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isControlled = externalIsOpen !== undefined;
@@ -77,6 +80,132 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
   const isListeningRef = useRef<boolean>(false);
   const aiTimerRef = useRef<any>(null);
   const dragControls = useDragControls();
+
+  // Customer autocomplete & suggestions state
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [selectedCustomerMeta, setSelectedCustomerMeta] = useState<CustomerSummary | null>(null);
+  const amountInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fetch customer summaries for smart autocomplete & debt accumulation
+  const { data: customerSummaries = [] } = useQuery({
+    queryKey: ['customerSummaries'],
+    queryFn: () => entriesService.getCustomerSummaries('highest'),
+    enabled: isOpen,
+  });
+
+  // Handle prefillCustomer prop if opened from Customer page / Ledger
+  useEffect(() => {
+    if (prefillCustomer) {
+      setEditCustomerName(prefillCustomer.name);
+      if (prefillCustomer.phone) {
+        setEditPhone(prefillCustomer.phone);
+      }
+      setActiveMode('nasiya');
+      const match = customerSummaries.find(
+        (c) => c.customer_name.trim().toLowerCase() === prefillCustomer.name.trim().toLowerCase()
+      );
+      if (match) {
+        setSelectedCustomerMeta(match);
+      }
+      setTimeout(() => {
+        amountInputRef.current?.focus();
+      }, 100);
+    }
+  }, [prefillCustomer, customerSummaries]);
+
+  // Sync selectedCustomerMeta when editCustomerName changes
+  useEffect(() => {
+    const trimmed = editCustomerName.trim().toLowerCase();
+    if (!trimmed) {
+      setSelectedCustomerMeta(null);
+      return;
+    }
+    const match = customerSummaries.find(
+      (c) => c.customer_name.trim().toLowerCase() === trimmed
+    );
+    setSelectedCustomerMeta(match || null);
+  }, [editCustomerName, customerSummaries]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowCustomerDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Filter matching suggestions when typing name or nickname
+  const customerSuggestions = useMemo(() => {
+    const q = editCustomerName.trim().toLowerCase();
+    if (!q) {
+      // Top customers with open debts for quick-pick
+      return customerSummaries.filter((c) => c.total_debt > 0).slice(0, 4);
+    }
+
+    return customerSummaries
+      .filter((c) => {
+        const cName = c.customer_name.toLowerCase();
+        const cPhone = (c.customer_phone || '').toLowerCase();
+
+        // 1. Direct substring match on full name or phone
+        if (cName.includes(q) || cPhone.includes(q)) return true;
+
+        // 2. Fuzzy Uzbek match on full name
+        if (fuzzyMatchUzbek(q, c.customer_name)) return true;
+
+        // 3. Match individual words / tokens (e.g. "qassob", "usta", "qo'shni", "traktorchi", "sartarosh")
+        const tokens = cName.split(/[\s(),'‘`"/-]+/).filter((t) => t.length >= 2);
+        if (tokens.some((token) => token.includes(q) || fuzzyMatchUzbek(q, token))) {
+          return true;
+        }
+
+        return false;
+      })
+      .slice(0, 5);
+  }, [editCustomerName, customerSummaries]);
+
+  // Find best matching customer for voice/AI parsing
+  const findMatchingExistingCustomer = (inputName: string): CustomerSummary | null => {
+    const q = inputName.trim().toLowerCase();
+    if (!q || q === 'mijoz') return null;
+
+    // Exact match
+    const exact = customerSummaries.find((c) => c.customer_name.toLowerCase() === q);
+    if (exact) return exact;
+
+    // Inclusion
+    const inc = customerSummaries.find(
+      (c) => c.customer_name.toLowerCase().includes(q) || q.includes(c.customer_name.toLowerCase())
+    );
+    if (inc) return inc;
+
+    // Token / nickname match
+    const tokenMatch = customerSummaries.find((c) => {
+      const tokens = c.customer_name.toLowerCase().split(/[\s(),'‘`"/-]+/).filter((t) => t.length >= 2);
+      return tokens.some((t) => t.includes(q) || q.includes(t) || fuzzyMatchUzbek(q, t));
+    });
+    if (tokenMatch) return tokenMatch;
+
+    // Fuzzy match
+    const fuzzy = customerSummaries.find((c) => fuzzyMatchUzbek(q, c.customer_name));
+    return fuzzy || null;
+  };
+
+  const handleSelectCustomer = (cust: CustomerSummary) => {
+    setEditCustomerName(cust.customer_name);
+    if (cust.customer_phone) {
+      setEditPhone(cust.customer_phone);
+    }
+    setSelectedCustomerMeta(cust);
+    setShowCustomerDropdown(false);
+    setTimeout(() => {
+      amountInputRef.current?.focus();
+    }, 50);
+  };
 
   // Helper date generators
   const getTodayStr = () => new Date().toISOString().split('T')[0];
@@ -120,7 +249,16 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
       const geminiData = await parseNasiyaWithGemini(text);
       if (geminiData && (geminiData.customer_name || geminiData.amount > 0)) {
         if (geminiData.customer_name && geminiData.customer_name !== 'Mijoz') {
-          setEditCustomerName(geminiData.customer_name);
+          const matched = findMatchingExistingCustomer(geminiData.customer_name);
+          if (matched) {
+            setEditCustomerName(matched.customer_name);
+            if (matched.customer_phone && !editPhone) {
+              setEditPhone(matched.customer_phone);
+            }
+            setSelectedCustomerMeta(matched);
+          } else {
+            setEditCustomerName(geminiData.customer_name);
+          }
         }
         if (geminiData.amount > 0) {
           setEditAmount(String(geminiData.amount));
@@ -162,7 +300,16 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
     if (res.transactions.length > 0) {
       const t = res.transactions[0];
       if (t.customer_name && t.customer_name !== 'Mijoz') {
-        setEditCustomerName(t.customer_name);
+        const matched = findMatchingExistingCustomer(t.customer_name);
+        if (matched) {
+          setEditCustomerName(matched.customer_name);
+          if (matched.customer_phone && !editPhone) {
+            setEditPhone(matched.customer_phone);
+          }
+          setSelectedCustomerMeta(matched);
+        } else {
+          setEditCustomerName(t.customer_name);
+        }
       }
       if (t.amount > 0) {
         setEditAmount(String(t.amount));
@@ -212,7 +359,13 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
     if (localRes.transactions.length > 0) {
       const t = localRes.transactions[0];
       if (t.customer_name && t.customer_name !== 'Mijoz' && !editCustomerName) {
-        setEditCustomerName(t.customer_name);
+        const matched = findMatchingExistingCustomer(t.customer_name);
+        if (matched) {
+          setEditCustomerName(matched.customer_name);
+          setSelectedCustomerMeta(matched);
+        } else {
+          setEditCustomerName(t.customer_name);
+        }
       }
       if (t.amount > 0 && !editAmount) {
         setEditAmount(String(t.amount));
@@ -366,13 +519,16 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
       );
 
       await queryClient.invalidateQueries({ queryKey: ['entries'] });
-      await queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+      await queryClient.invalidateQueries({ queryKey: ['customers'] });
       await queryClient.invalidateQueries({ queryKey: ['customerSummaries'] });
+      await queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
       await queryClient.invalidateQueries({ queryKey: ['adminLogs'] });
 
       showToast(`✅ ${customer} daftariga ${formatMoney(numAmount)} muvaffaqiyatli yozildi!`, 'success');
       setInputText('');
       setEditCustomerName('');
+      setSelectedCustomerMeta(null);
+      setShowCustomerDropdown(false);
       setEditAmount('');
       setEditItems('');
       setEditPhone('');
@@ -661,27 +817,118 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
                   {/* Spacious Form Fields Box */}
                   <div className="p-3.5 bg-slate-100 border border-slate-300 rounded-2xl space-y-2.5 shadow-2xs shrink-0">
-                    {/* Row 1: Name and Amount */}
+                    {/* Row 1: Name (with smart autocomplete) and Amount */}
                     <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                          <User className="w-3.5 h-3.5 text-slate-500" />
-                          <span>Mijoz ismi *</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={editCustomerName}
-                          onChange={(e) => setEditCustomerName(e.target.value)}
-                          placeholder="Akmal aka"
-                          className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-bold transition-colors shadow-2xs"
-                        />
+                      {/* Customer Name input with rich autocomplete dropdown */}
+                      <div className="relative" ref={dropdownRef}>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                            <User className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Mijoz ismi *</span>
+                          </label>
+                          {selectedCustomerMeta && (
+                            <span className="text-[10px] text-emerald-700 font-black flex items-center gap-0.5">
+                              <Check className="w-3 h-3" />
+                              <span>Mavjud</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={editCustomerName}
+                            onFocus={() => setShowCustomerDropdown(true)}
+                            onChange={(e) => {
+                              setEditCustomerName(e.target.value);
+                              setShowCustomerDropdown(true);
+                            }}
+                            placeholder="Ism yoki laqab (masalan: Qassob, Qo'shni)..."
+                            className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-bold transition-colors shadow-2xs pr-7"
+                          />
+                          {editCustomerName && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditCustomerName('');
+                                setSelectedCustomerMeta(null);
+                                setShowCustomerDropdown(true);
+                              }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                              title="Tozalash"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Customer Autocomplete Dropdown */}
+                        {showCustomerDropdown && customerSuggestions.length > 0 && (
+                          <div className="absolute left-0 w-[240px] sm:w-[280px] top-full mt-1.5 bg-white border-2 border-violet-600 rounded-2xl shadow-2xl z-50 overflow-hidden divide-y divide-slate-100 max-h-56 overflow-y-auto">
+                            <div className="p-2 bg-violet-50/95 border-b border-violet-100 flex items-center justify-between text-[10.5px] font-bold text-violet-900">
+                              <span className="flex items-center gap-1">
+                                <Users className="w-3 h-3 text-violet-700" />
+                                <span>Tavsiya etilgan mijozlar:</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setShowCustomerDropdown(false)}
+                                className="text-slate-400 hover:text-slate-700 text-xs font-bold cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            </div>
+
+                            {customerSuggestions.map((cust) => {
+                              const isSelected =
+                                cust.customer_name.toLowerCase() === editCustomerName.trim().toLowerCase();
+
+                              return (
+                                <button
+                                  key={cust.customer_name}
+                                  type="button"
+                                  onClick={() => handleSelectCustomer(cust)}
+                                  className={`w-full p-2.5 text-left flex items-center justify-between gap-2 hover:bg-violet-50 transition-colors cursor-pointer ${
+                                    isSelected ? 'bg-violet-100/70' : ''
+                                  }`}
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <div className="font-black text-slate-900 text-xs truncate">
+                                      {cust.customer_name}
+                                    </div>
+                                    {cust.customer_phone ? (
+                                      <span className="text-[10px] text-slate-500 font-mono block">
+                                        {cust.customer_phone}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9.5px] text-slate-400 italic block">
+                                        Telefon kiritilmagan
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="text-right shrink-0">
+                                    <span className="text-xs font-black text-rose-700 block">
+                                      {formatMoney(cust.total_debt)}
+                                    </span>
+                                    <span className="text-[9.5px] text-slate-500 font-bold block">
+                                      {cust.open_entries_count} ta ochiq
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
+                      {/* Amount Input */}
                       <div>
                         <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
                           <span>Summa (so‘m) *</span>
                         </label>
                         <input
+                          ref={amountInputRef}
                           type="text"
                           inputMode="numeric"
                           value={editAmount ? formatNumberWithSpaces(editAmount) : ''}
@@ -695,6 +942,26 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                         />
                       </div>
                     </div>
+
+                    {/* Notification Banner when customer is selected */}
+                    {selectedCustomerMeta && (
+                      <div className="p-2.5 bg-violet-100/95 border border-violet-300 rounded-xl flex items-center justify-between text-xs text-violet-950 shadow-2xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Users className="w-4 h-4 text-violet-700 shrink-0" />
+                          <div className="truncate">
+                            <span className="font-black text-slate-900">
+                              {selectedCustomerMeta.customer_name}
+                            </span>
+                            <span className="text-slate-600 ml-1.5 font-medium">
+                              • Mavjud qarz: <strong className="text-rose-700 font-black">{formatMoney(selectedCustomerMeta.total_debt)}</strong> ({selectedCustomerMeta.open_entries_count} ta ochiq)
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] bg-violet-700 text-white font-black px-2 py-0.5 rounded-md shrink-0 shadow-2xs">
+                          Bunga qo‘shiladi
+                        </span>
+                      </div>
+                    )}
 
                     {/* Row 2: Items and Phone (Optional) */}
                     <div className="grid grid-cols-2 gap-3">

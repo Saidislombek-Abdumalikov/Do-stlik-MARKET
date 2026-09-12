@@ -26,6 +26,7 @@ const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [customerFilter, setCustomerFilter] = useState<string>('');
   const [isAIDrawerOpen, setIsAIDrawerOpen] = useState<boolean>(false);
+  const [prefillCustomer, setPrefillCustomer] = useState<{ name: string; phone?: string | null } | null>(null);
 
   // Enable live Supabase realtime sync
   useRealtime();
@@ -52,7 +53,10 @@ const AppContent: React.FC = () => {
       {activeTab === 'dashboard' && (
         <DashboardPage
           onNavigate={(tab: any) => setActiveTab(tab)}
-          onOpenNewDebt={() => setIsAIDrawerOpen(true)}
+          onOpenNewDebt={() => {
+            setPrefillCustomer(null);
+            setIsAIDrawerOpen(true);
+          }}
         />
       )}
 
@@ -62,13 +66,20 @@ const AppContent: React.FC = () => {
             setCustomerFilter(customerName);
             setActiveTab('entries');
           }}
+          onOpenNewDebtForCustomer={(customerName, customerPhone) => {
+            setPrefillCustomer({ name: customerName, phone: customerPhone });
+            setIsAIDrawerOpen(true);
+          }}
         />
       )}
 
       {activeTab === 'entries' && (
         <EntriesPage
           initialSearch={customerFilter}
-          onNewEntryClick={() => setIsAIDrawerOpen(true)}
+          onNewEntryClick={() => {
+            setPrefillCustomer(null);
+            setIsAIDrawerOpen(true);
+          }}
         />
       )}
 
@@ -76,7 +87,11 @@ const AppContent: React.FC = () => {
       <FloatingAIButton
         isOpen={isAIDrawerOpen}
         onOpen={() => setIsAIDrawerOpen(true)}
-        onClose={() => setIsAIDrawerOpen(false)}
+        onClose={() => {
+          setIsAIDrawerOpen(false);
+          setPrefillCustomer(null);
+        }}
+        prefillCustomer={prefillCustomer}
         onNavigate={(tab) => setActiveTab(tab)}
       />
     </Layout>
