@@ -1,16 +1,18 @@
 -- ============================================================
 -- DO'STLIK MARKET — SEED & INITIAL SETUP SCRIPT
--- Run this after running the migration in Supabase SQL Editor
+-- Run this in Supabase SQL Editor after 20260912_initial_schema.sql
 -- ============================================================
 
--- NOTE: To assign an owner to your Supabase Auth user:
--- 1. Create a user via Supabase Auth Dashboard or Login screen.
--- 2. Run the following query replacing 'YOUR_USER_UUID' with the actual user ID:
-/*
-INSERT INTO profiles (id, role, full_name, phone, is_active)
-VALUES ('YOUR_USER_UUID', 'owner', 'Do‘kon Egasi (Saidislom)', '+998901234567', true)
-ON CONFLICT (id) DO UPDATE SET role = 'owner', is_active = true;
-*/
+-- Insert the 3 official staff accounts:
+INSERT INTO profiles (id, role, full_name, phone, pin_code, avatar_color, is_active)
+VALUES 
+  ('00000000-0000-0000-0000-000000000001', 'owner', 'Sohibboy', '+998901234501', '7777', 'from-violet-600 to-purple-600', true),
+  ('00000000-0000-0000-0000-000000000002', 'worker', 'Sayfullo', '+998901234502', '2222', 'from-emerald-600 to-teal-600', true),
+  ('00000000-0000-0000-0000-000000000003', 'worker', 'Abubakir', '+998901234503', '1111', 'from-blue-600 to-indigo-600', true)
+ON CONFLICT (id) DO UPDATE SET 
+  full_name = EXCLUDED.full_name,
+  role = EXCLUDED.role,
+  pin_code = EXCLUDED.pin_code,
+  avatar_color = EXCLUDED.avatar_color,
+  is_active = true;
 
--- Sample workers (for development / testing):
--- These can be linked to real auth.users when created.

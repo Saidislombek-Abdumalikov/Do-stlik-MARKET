@@ -17,12 +17,13 @@ CREATE TYPE admin_action_type AS ENUM (
 );
 
 -- ── 2. PROFILES TABLE ───────────────────────────────────────
--- Maps 1-to-1 with auth.users
 CREATE TABLE IF NOT EXISTS profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   role user_role NOT NULL DEFAULT 'worker',
   full_name TEXT NOT NULL,
   phone TEXT UNIQUE,
+  pin_code VARCHAR(4) NOT NULL DEFAULT '0000',
+  avatar_color TEXT,
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -31,7 +32,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 -- ── 3. ENTRIES TABLE (CENTRAL DEBT RECORDS) ─────────────────
 CREATE TABLE IF NOT EXISTS entries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  direction debt_direction NOT NULL, -- 'customer' (Mijoz qarzi) or 'supplier' (Yetkazib beruvchi qarzi)
+  direction debt_direction NOT NULL DEFAULT 'customer', -- 'customer' (Mijoz qarzi) or 'supplier' (Yetkazib beruvchi qarzi)
   party_name TEXT NOT NULL,          -- Mijoz yoki Yetkazib beruvchi ismi
   party_phone TEXT,                  -- Telefon raqami
   amount NUMERIC(15, 2) NOT NULL CHECK (amount > 0), -- Qarz summasi (so'm)
@@ -40,6 +41,9 @@ CREATE TABLE IF NOT EXISTS entries (
   due_date DATE,                     -- To'lash muddati
   paid_at TIMESTAMPTZ,               -- To'langan sana (average time-to-payment uchun muhim)
   created_by UUID REFERENCES profiles(id) ON DELETE SET NULL, -- Kiritgan ishchi yoki egasi
+  recorded_by_name TEXT,
+  confirmed_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  confirmed_by_name TEXT,
   last_edited_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -260,9 +264,23 @@ CREATE POLICY "admin_action_log_insert_policy" ON admin_action_log
 CREATE POLICY "admin_action_log_no_update" ON admin_action_log
   FOR UPDATE USING (false);
 
-CREATE POLICY "admin_action_log_no_delete" ON admin_action_log
-  FOR DELETE USING (false);
+-- 9.5 STORE CASHIER APP (ANON ROLE POLICIES)
+-- Allows retail cashier frontend using Supabase anon key & 4-digit PIN to sync data
+CREATE POLICY "anon_profiles_select" ON profiles FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_profiles_update" ON profiles FOR UPDATE TO anon USING (true);
+
+CREATE POLICY "anon_entries_select" ON entries FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_entries_insert" ON entries FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "anon_entries_update" ON entries FOR UPDATE TO anon USING (true);
+CREATE POLICY "anon_entries_delete" ON entries FOR DELETE TO anon USING (true);
+
+CREATE POLICY "anon_entry_history_select" ON entry_history FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_entry_history_insert" ON entry_history FOR INSERT TO anon WITH CHECK (true);
+
+CREATE POLICY "anon_admin_action_log_select" ON admin_action_log FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_admin_action_log_insert" ON admin_action_log FOR INSERT TO anon WITH CHECK (true);
 
 -- ── 10. REALTIME ENABLEMENT ─────────────────────────────────
 ALTER PUBLICATION supabase_realtime ADD TABLE entries;
 ALTER PUBLICATION supabase_realtime ADD TABLE admin_action_log;
+
