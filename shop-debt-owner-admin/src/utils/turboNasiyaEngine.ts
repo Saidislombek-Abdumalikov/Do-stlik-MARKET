@@ -73,8 +73,17 @@ const COMMON_GROCERIES = [
 ];
 
 const HONORIFICS = [
-  'aka', 'opa', 'uka', 'singil', 'toga', "tog'a", 'amaki', 'xola', 'amma',
-  'usta', "qo'shni", 'qoshni', "do'xtir", 'doxtir', 'pochcha', 'kelin', 'kuyov',
+  'aka', 'oka', 'okam', 'akam', 'akaxon', 'okaxon', 'okasi', 'akasi',
+  'opa', 'opam', 'opaxon', 'opasi',
+  'uka', 'ukam', 'singil',
+  'toga', "tog'a", 'togam', "tog'am",
+  'amaki', 'amakim',
+  'xola', 'xolam',
+  'amma', 'ammam',
+  'usta', 'ustam',
+  "qo'shni", 'qoshni',
+  "do'xtir", 'doxtir',
+  'pochcha', 'kelin', 'kuyov',
   'mulla', 'domla', 'muallim', 'hoji', 'qori', 'rais',
   'qassob', 'qossop', 'qossob', 'kassob', 'novvoy', 'novoy', 'nonvoy',
   'bozorchi', 'haydovchi', 'shofyor', 'shofir', 'taksist', 'dokondor', "do'kondor",
@@ -90,6 +99,20 @@ export function normalizeWord(w: string): string {
   clean = clean.replace(/(?:lardan|larga|larda|larni|larning|lar|dan|tan|ga|ka|qa|da|ta|ning|ni|chi|lik|li)$/, '');
   clean = clean.trim();
   
+  // Aka / Oka shevalari
+  if (clean === 'oka' || clean === 'okam' || clean === 'akam' || clean === 'akaxon' || clean === 'okaxon' || clean === 'okasi' || clean === 'akasi' || clean === 'oko') return 'aka';
+  // Opa shevalari
+  if (clean === 'opam' || clean === 'opaxon' || clean === 'opasi') return 'opa';
+  // Tog'a / Amaki
+  if (clean === 'toga' || clean === 'togam' || clean === "tog'am") return "tog'a";
+  if (clean === 'amakim' || clean === 'amasi') return 'amaki';
+  if (clean === 'xolam') return 'xola';
+  if (clean === 'ammam') return 'amma';
+  if (clean === 'ustam') return 'usta';
+
+  // Farhod shevalari (Farxod, Farxot, Farhot)
+  if (clean === 'farxod' || clean === 'farxot' || clean === 'farhot') return 'farhod';
+
   // Qassob shevalari
   if (clean === 'qossob' || clean === 'qossop' || clean === 'kassob' || clean === 'qasob') return 'qassob';
   // Rasul ismining talaffuzlari (rosil, rosl, rosul, rasl)
@@ -280,10 +303,29 @@ export function resolveCompoundNumbers(rawText: string): { amount: number; curre
     return { amount: Math.round(parseFloat(pureMlnMatch[1]) * 1000000), currency: 'UZS' };
   }
 
-  // 9. Plain numeric search (e.g., 145000, 85000, 50000), ignoring small numbers like 1, 2, 5 that could be item quantities
+  // 9. Plain numeric search (e.g., 145000, 85000, 50000, 30000, 3000)
   const allNums = text.match(/\b\d{4,9}\b/g);
   if (allNums && allNums.length > 0) {
     return { amount: parseInt(allNums[allNums.length - 1], 10), currency: 'UZS' };
+  }
+
+  // 10. Store shortcut: "Farhod aka 30", "Olimjon oka 50", "100 yoz" (between 10 and 999 where no unit like kg/ta is attached)
+  const shortNumMatch = text.match(/\b([1-9]\d{1,2})\b(?!\s*(?:ta|dona|kg|kilo|litr|gr|qop|blok|metr|dast))/i);
+  if (shortNumMatch) {
+    const val = parseInt(shortNumMatch[1], 10);
+    // In grocery stores, 10 to 999 means thousands of sums (e.g. 30 -> 30000, 50 -> 50000)
+    if (val >= 10 && val <= 999) {
+      return { amount: val * 1000, currency: 'UZS' };
+    }
+  }
+
+  // 11. Standalone single spoken numbers like "o'ttiz", "ellik", "yigirma"
+  const standaloneWordMatch = text.match(/\b(o['ʻʼ`]?n|on|yigirma|o['ʻʼ`]?ttiz|ottiz|qirq|ellik|oltmish|yetmish|etmish|sakson|to['ʻʼ`]?qson|toqson|yuz)\b/i);
+  if (standaloneWordMatch) {
+    const val = extractUzbekNumber(standaloneWordMatch[1]);
+    if (val && val >= 10) {
+      return { amount: val * 1000, currency: 'UZS' };
+    }
   }
 
   return { amount: 0, currency: 'UZS' };
@@ -292,7 +334,22 @@ export function resolveCompoundNumbers(rawText: string): { amount: number; curre
 // ── 4. EXTRACT CUSTOMER NAME & HONORIFICS ─────────────────────
 
 function stripGrammarSuffixes(word: string): string {
-  let w = word.trim().toLowerCase();
+  let w = word.trim().toLowerCase().replace(/[ʻʼ`´]/g, "'");
+
+  // If the word starts with honorifics: okaga, okamga, okasiga, akaga, akamga
+  if (/^(?:oka|aka)(?:ga|mga|mizga|siga|cha|xon)?$/.test(w)) {
+    return 'aka';
+  }
+  if (/^opa(?:ga|mga|mizga|siga|xon)?$/.test(w)) {
+    return 'opa';
+  }
+  if (/^(?:toga|tog'a)(?:ga|mga|siga)?$/.test(w)) {
+    return "tog'a";
+  }
+  if (/^amaki(?:ga|mga|siga)?$/.test(w)) {
+    return 'amaki';
+  }
+
   // If the word itself is an exact honorific (e.g. "aka", "uka", "qassob"), do not strip
   if (HONORIFICS.includes(w)) {
     return w;

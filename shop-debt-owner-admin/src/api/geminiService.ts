@@ -22,35 +22,54 @@ export async function parseNasiyaWithGemini(userText: string): Promise<GeminiNas
     return null;
   }
 
-  const prompt = `Sen O'zbek do'konlari uchun "Nasiya Daftari" AI yordamchisisan.
-Foydalanuvchi do'konda o'zbek tilida, xalqona lahjalarda (masalan "qossob", "akfachi", "rosil", "50 mingli go'sh", "ertaga beradi") gapirishi mumkin.
-Matnni tahlil qilib, faqat quyidagi JSON formatida qaytar:
+  const prompt = `Sen O'zbek do'konlari uchun "Nasiya Daftari" aqlli AI yordamchisisan.
+Sotuvchi yoki kassir do'konda o'zbek tilida, xalqona lahja va shevalarda gapiradi.
+Masalan:
+- "Farhod oka 30 000" yoki "Farxod okaga 30 000" -> customer_name: "Farhod aka", amount: 30000
+- "Qossobga 50 ming go'sh" -> customer_name: "Sardor qassob", amount: 50000, items: "go'sht"
+- "Akmal akamga 120 000" -> customer_name: "Akmal aka", amount: 120000
+- "Olim aka 25 ming" -> customer_name: "Olim aka", amount: 25000
+
+QOIDALAR:
+1. "oka", "okam", "okaga", "akamga" so'zlari hurmat yuzasidan "aka" deb yozilsin.
+2. "Farxod" -> "Farhod".
+3. Summa doim so'mda son qilib (masalan 30000) chiqarilsin. 30 000 yoki o'ttiz ming 30000 bo'ladi (3000 emas!).
+4. Javobni FAQAT quyidagi JSON formatida qaytar:
 {
-  "customer_name": "Mijozning to'g'ri ismi yoki unvoni (masalan: Abu qassob, Rasul akfa, Olimjon aka)",
-  "amount": 50000,
-  "items": "olingan tovarlar (masalan: 1 kg go'sht, 2 ta non)",
+  "customer_name": "Farhod aka",
+  "amount": 30000,
+  "items": "olingan tovarlar",
   "due_condition": "ertaga",
-  "phone": "agar telefon raqami aytilgan bo'lsa raqam, aks holda null"
+  "phone": null
 }
 
 Foydalanuvchi aytgan gap: "${text.replace(/"/g, '\\"')}"`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-        },
-      }),
-    });
+    const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+    let response: Response | null = null;
 
-    if (!response.ok) {
-      console.warn('Gemini API request failed with status:', response.status);
+    for (const model of models) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.1,
+          },
+        }),
+      });
+      if (res.ok) {
+        response = res;
+        break;
+      }
+    }
+
+    if (!response || !response.ok) {
+      console.warn('Gemini API so‘rovi muvaffaqiyatsiz bo‘ldi, lokal NLP ishlatiladi.');
       return null;
     }
 
