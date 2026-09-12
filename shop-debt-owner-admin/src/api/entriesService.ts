@@ -40,13 +40,11 @@ const getStored = <T>(key: string, initial: T): T => {
       localStorage.setItem(key, JSON.stringify(initial));
       return initial;
     }
-    if (key === STORAGE_ENTRIES && Array.isArray(initial) && Array.isArray(parsed)) {
-      const existingIds = new Set(parsed.map((e: any) => e.id));
-      const missing = (initial as any[]).filter((e) => !existingIds.has(e.id));
-      if (missing.length > 0) {
-        const merged = [...parsed, ...missing];
-        localStorage.setItem(key, JSON.stringify(merged));
-        return merged as T;
+    if (key === STORAGE_ENTRIES && Array.isArray(parsed)) {
+      const cleaned = parsed.filter((e: any) => !e.id?.startsWith('entry-1'));
+      if (cleaned.length !== parsed.length) {
+        localStorage.setItem(key, JSON.stringify(cleaned));
+        return cleaned as T;
       }
     }
     return parsed;
@@ -100,11 +98,31 @@ export const entriesService = {
       return data as Profile[];
     }
     const current = getStored<Profile[]>(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
-    if (!current || current.length !== 3 || !current.some((p: Profile) => p.id === 'user-abubakir')) {
+    if (!current || current.length !== 3 || !current.some((p: Profile) => p.id === 'user-sohibboy')) {
       setStored(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
       return INITIAL_MOCK_PROFILES;
     }
     return current;
+  },
+
+  async updatePinCode(userId: string, newPin: string): Promise<Profile> {
+    if (isSupabaseConfigured()) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({ pin_code: newPin, updated_at: new Date().toISOString() })
+        .eq('id', userId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Profile;
+    }
+
+    const profiles = getStored<Profile[]>(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
+    const updated = profiles.map((p) => (p.id === userId ? { ...p, pin_code: newPin, updated_at: new Date().toISOString() } : p));
+    setStored(STORAGE_PROFILES, updated);
+    const target = updated.find((p) => p.id === userId);
+    if (!target) throw new Error('Foydalanuvchi topilmadi');
+    return target;
   },
 
   async toggleWorkerStatus(workerId: string, isActive: boolean, adminUser: { id: string; name: string }): Promise<void> {

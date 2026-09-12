@@ -90,7 +90,7 @@ export const EntryDetailModal: React.FC<EntryDetailModalProps> = ({
               <span>To‘lovni Tasdiqlagan:</span>
             </div>
             <div className={`font-black truncate ${entry.status === 'paid' ? 'text-emerald-800' : 'text-slate-400'}`}>
-              {entry.confirmed_by_name || entry.confirmer_profile?.full_name || (entry.status === 'paid' ? 'Muhammad' : 'Hali to‘lanmagan')}
+              {entry.confirmed_by_name || entry.confirmer_profile?.full_name || (entry.status === 'paid' ? 'Sayfullo' : 'Hali to‘lanmagan')}
             </div>
           </div>
 

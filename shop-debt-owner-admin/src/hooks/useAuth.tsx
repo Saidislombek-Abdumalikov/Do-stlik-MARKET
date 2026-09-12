@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../api/supabase';
 import { Profile } from '../types/database';
 import { INITIAL_MOCK_PROFILES } from '../api/mockData';
+import { entriesService } from '../api/entriesService';
 
 interface AuthContextType {
   user: { id: string; email?: string } | null;
@@ -11,7 +12,8 @@ interface AuthContextType {
   setSelectedProfile: (profile: Profile | null) => void;
   isOwner: boolean;
   isLoading: boolean;
-  loginWithPin: (pin: string, profileId?: string) => Promise<boolean>;
+  loginWithPin: (pin: string) => Promise<boolean>;
+  updatePinCode: (oldPin: string, newPin: string) => Promise<boolean>;
   login: (phoneOrEmail: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
   lockApp: () => void;
@@ -24,7 +26,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [profiles] = useState<Profile[]>(INITIAL_MOCK_PROFILES);
+  const [profiles, setProfiles] = useState<Profile[]>(INITIAL_MOCK_PROFILES);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(INITIAL_MOCK_PROFILES[0]);
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -35,6 +37,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async function initAuth() {
       const isLocked = localStorage.getItem('dostlik_is_locked') === 'true';
       const storedProfileId = localStorage.getItem('dostlik_active_profile_id');
+
+      // Sync fresh profiles from entriesService/localStorage
+      try {
+        const freshProfiles = await entriesService.getProfiles();
+        if (mounted) setProfiles(freshProfiles);
+      } catch (err) {
+        console.warn('Profiles load error:', err);
+      }
 
       if (isSupabaseConfigured()) {
         try {
@@ -80,23 +90,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       } else {
         // Fast PIN mode for store:
+        const currentProfiles = await entriesService.getProfiles();
+        if (mounted) setProfiles(currentProfiles);
+
         if (!isLocked && storedProfileId) {
-          const found = INITIAL_MOCK_PROFILES.find((p) => p.id === storedProfileId);
+          const found = currentProfiles.find((p) => p.id === storedProfileId && p.is_active);
           if (found) {
             setUser({ id: found.id, email: `${found.id}@dostlikmarket.uz` });
             setProfile(found);
             setSelectedProfile(found);
           } else {
             setUser(null);
-            setSelectedProfile(INITIAL_MOCK_PROFILES[0]);
+            setSelectedProfile(currentProfiles[0]);
           }
         } else {
           // Locked screen or first load
           setUser(null);
           const lastActive = storedProfileId
-            ? INITIAL_MOCK_PROFILES.find((p) => p.id === storedProfileId)
+            ? currentProfiles.find((p) => p.id === storedProfileId)
             : null;
-          setSelectedProfile(lastActive || INITIAL_MOCK_PROFILES[0]);
+          setSelectedProfile(lastActive || currentProfiles[0]);
         }
         setIsLoading(false);
       }
@@ -110,26 +123,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearError = () => setAuthError(null);
 
-  const loginWithPin = async (pin: string, profileId?: string): Promise<boolean> => {
+  // Direct PIN login: user types their 4-digit PIN without needing to pick an account first
+  const loginWithPin = async (pin: string): Promise<boolean> => {
     setAuthError(null);
     setIsLoading(true);
 
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 150));
 
-    let matched: Profile | undefined;
-    const targetId = profileId || selectedProfile?.id;
+    const currentProfiles = await entriesService.getProfiles();
+    setProfiles(currentProfiles);
 
-    if (targetId) {
-      const p = INITIAL_MOCK_PROFILES.find((prof) => prof.id === targetId);
-      if (p && p.pin_code === pin) {
-        matched = p;
-      }
-    }
-
-    // Direct match fallback: if pin matches any of the 3 accounts, log in directly
-    if (!matched) {
-      matched = INITIAL_MOCK_PROFILES.find((prof) => prof.pin_code === pin);
-    }
+    // Direct match: matches any active staff member with this PIN
+    const matched = currentProfiles.find((prof) => prof.pin_code === pin && prof.is_active);
 
     if (!matched) {
       setAuthError('Noto‘g‘ri PIN kod! Qaytadan tering.');
@@ -144,6 +149,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfile(matched);
     setSelectedProfile(matched);
     setIsLoading(false);
+    return true;
+  };
+
+  // Change PIN code for current logged in user
+  const updatePinCode = async (oldPin: string, newPin: string): Promise<boolean> => {
+    if (!profile) throw new Error('Tizimga kirmagansiz');
+    if (profile.pin_code && profile.pin_code !== oldPin) {
+      throw new Error('Hozirgi PIN kod noto‘g‘ri kiritildi');
+    }
+    if (newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
+      throw new Error('Yangi PIN kod 4 ta raqamdan iborat bo‘lishi kerak');
+    }
+    const updated = await entriesService.updatePinCode(profile.id, newPin);
+    setProfile(updated);
+    setSelectedProfile(updated);
+    setProfiles((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     return true;
   };
 
@@ -229,6 +250,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isOwner,
         isLoading,
         loginWithPin,
+        updatePinCode,
         login,
         logout,
         lockApp,
@@ -244,7 +266,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    const defaultOwner = INITIAL_MOCK_PROFILES[2];
+    const defaultOwner = INITIAL_MOCK_PROFILES[0];
     return {
       user: null,
       profile: defaultOwner,
@@ -254,6 +276,7 @@ export const useAuth = () => {
       isOwner: true,
       isLoading: false,
       loginWithPin: async () => false,
+      updatePinCode: async () => false,
       login: async () => {},
       logout: async () => {},
       lockApp: () => {},

@@ -1,18 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { ShieldCheck, Lock, Delete, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Lock, Delete, Loader2, CheckCircle2, AlertCircle, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Profile } from '../types/database';
 
 export const LoginPage: React.FC = () => {
-  const { profiles, selectedProfile, setSelectedProfile, loginWithPin, authError, clearError, isLoading } = useAuth();
+  const { profiles, loginWithPin, authError, clearError, isLoading } = useAuth();
 
   const [pin, setPin] = useState<string>('');
   const [isShaking, setIsShaking] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-
-  // Active selected profile or fallback to first
-  const activeProfile = selectedProfile || profiles[0];
+  const [successUser, setSuccessUser] = useState<string | null>(null);
 
   const handleKeyPress = useCallback(
     async (digit: string) => {
@@ -25,8 +22,11 @@ export const LoginPage: React.FC = () => {
 
       if (newPin.length === 4) {
         try {
-          const success = await loginWithPin(newPin, activeProfile?.id);
+          const success = await loginWithPin(newPin);
           if (success) {
+            // Find which profile matched for celebratory welcome
+            const matched = profiles.find((p) => p.pin_code === newPin && p.is_active);
+            setSuccessUser(matched?.full_name || 'Xush kelibsiz');
             setIsSuccess(true);
           } else {
             setIsShaking(true);
@@ -44,7 +44,7 @@ export const LoginPage: React.FC = () => {
         }
       }
     },
-    [pin, activeProfile, isLoading, isSuccess, loginWithPin, clearError]
+    [pin, isLoading, isSuccess, loginWithPin, clearError, profiles]
   );
 
   const handleDelete = useCallback(() => {
@@ -75,12 +75,6 @@ export const LoginPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyPress, handleDelete, handleClear]);
 
-  const handleSelectAccount = (prof: Profile) => {
-    setSelectedProfile(prof);
-    setPin('');
-    clearError();
-  };
-
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-3 relative overflow-hidden select-none">
       {/* Background ambient lighting */}
@@ -89,42 +83,36 @@ export const LoginPage: React.FC = () => {
 
       <div className="relative w-full max-w-sm p-6 bg-slate-800/95 border border-slate-700/80 rounded-3xl shadow-2xl space-y-5 backdrop-blur-xl">
         {/* Brand & Badge */}
-        <div className="text-center space-y-1">
+        <div className="text-center space-y-1.5">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-violet-500/20 border border-violet-500/40 text-violet-300 mb-1 shadow-lg shadow-violet-950/60">
             <ShieldCheck className="w-6 h-6" />
           </div>
-          <h1 className="text-xl font-black text-white tracking-tight">
+          <h1 className="text-2xl font-black text-white tracking-tight">
             Do'stlik MARKET
           </h1>
-          <p className="text-[11px] text-slate-400 font-medium">
-            3 Ta Hisob Bilan Himoyalangan Nasiya Tizimi
+          <p className="text-xs text-slate-400 font-medium">
+            Nasiya va Savdo Boshqaruv Tizimi
           </p>
         </div>
 
-        {/* 3 User Account Selectors */}
-        <div>
-          <label className="block text-[11px] font-bold text-slate-400 text-center mb-2">
-            Hisobni tanlang:
-          </label>
-          <div className="grid grid-cols-3 gap-2">
+        {/* 3 Registered Accounts Indicator */}
+        <div className="p-2.5 rounded-2xl bg-slate-900/60 border border-slate-700/60">
+          <div className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-slate-400 mb-2">
+            <Users className="w-3.5 h-3.5 text-violet-400" />
+            <span>Tizim xodimlari</span>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
             {profiles.slice(0, 3).map((prof) => {
-              const isSelected = activeProfile?.id === prof.id;
               const isOwner = prof.role === 'owner';
               const initial = prof.full_name.slice(0, 2).toUpperCase();
 
               return (
-                <button
+                <div
                   key={prof.id}
-                  type="button"
-                  onClick={() => handleSelectAccount(prof)}
-                  className={`p-2.5 rounded-2xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer relative ${
-                    isSelected
-                      ? 'bg-violet-950/60 border-violet-500 ring-2 ring-violet-500/30 shadow-md shadow-violet-950/50 scale-[1.03]'
-                      : 'bg-slate-900/60 border-slate-700/60 hover:border-slate-600 opacity-75 hover:opacity-100'
-                  }`}
+                  className="p-1.5 rounded-xl bg-slate-800/80 border border-slate-700/50 flex flex-col items-center text-center"
                 >
                   <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-xs shadow-xs ${
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-white font-black text-[10px] mb-1 shadow-xs ${
                       prof.avatar_color
                         ? `bg-gradient-to-tr ${prof.avatar_color}`
                         : isOwner
@@ -132,29 +120,25 @@ export const LoginPage: React.FC = () => {
                         : 'bg-gradient-to-tr from-blue-600 to-cyan-600'
                     }`}
                   >
-                    {isOwner ? 'SI 👑' : initial}
+                    {isOwner ? '👑' : initial}
                   </div>
-                  <div className="text-center w-full min-w-0">
-                    <span className="text-xs font-black text-slate-100 block truncate">
-                      {prof.full_name.split(' ')[0]}
-                    </span>
-                    <span className="text-[9px] font-semibold text-slate-400 block truncate">
-                      {isOwner ? 'Egasi' : 'Sotuvchi'}
-                    </span>
-                  </div>
-                </button>
+                  <span className="text-[11px] font-bold text-slate-200 block truncate w-full">
+                    {prof.full_name.split(' ')[0]}
+                  </span>
+                  <span className="text-[9px] font-medium text-slate-500 block">
+                    {isOwner ? 'Egasi' : 'Sotuvchi'}
+                  </span>
+                </div>
               );
             })}
           </div>
         </div>
 
         {/* PIN Dots Area */}
-        <div className="text-center space-y-2 pt-1">
-          <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-slate-300">
-            <Lock className="w-3 h-3 text-violet-400" />
-            <span>
-              <strong className="text-white">{activeProfile?.full_name}</strong> uchun 4 xonali PIN kiriting:
-            </span>
+        <div className="text-center space-y-2 pt-0.5">
+          <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-slate-300">
+            <Lock className="w-3.5 h-3.5 text-violet-400" />
+            <span>PIN kodingizni kiriting:</span>
           </div>
 
           {/* Animated PIN Dots */}
@@ -163,11 +147,11 @@ export const LoginPage: React.FC = () => {
               isShaking
                 ? { x: [-10, 10, -8, 8, -4, 4, 0] }
                 : isSuccess
-                ? { scale: [1, 1.08, 1] }
+                ? { scale: [1, 1.12, 1] }
                 : {}
             }
             transition={{ duration: 0.4 }}
-            className="flex items-center justify-center gap-3 py-2"
+            className="flex items-center justify-center gap-3.5 py-2"
           >
             {[0, 1, 2, 3].map((index) => {
               const isFilled = pin.length > index;
@@ -196,7 +180,7 @@ export const LoginPage: React.FC = () => {
                   initial={{ opacity: 0, y: -2 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
-                  className="flex items-center gap-1.5 text-violet-400 text-[11px]"
+                  className="flex items-center gap-1.5 text-violet-400 text-xs"
                 >
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   <span>Tekshirilmoqda...</span>
@@ -206,10 +190,10 @@ export const LoginPage: React.FC = () => {
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="flex items-center gap-1 text-emerald-400 text-[11px]"
+                  className="flex items-center gap-1.5 text-emerald-400 text-xs font-bold"
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Muvaffaqiyatli! Kirilmoqda...</span>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Xush kelibsiz, {successUser}!</span>
                 </motion.div>
               )}
               {!isLoading && !isSuccess && authError && (
@@ -217,15 +201,15 @@ export const LoginPage: React.FC = () => {
                   initial={{ opacity: 0, y: -2 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
-                  className="flex items-center gap-1 text-rose-400 text-[11px]"
+                  className="flex items-center gap-1 text-rose-400 text-xs"
                 >
                   <AlertCircle className="w-3.5 h-3.5" />
                   <span>{authError}</span>
                 </motion.div>
               )}
               {!isLoading && !isSuccess && !authError && (
-                <span className="text-slate-500 text-[10px]">
-                  PIN: {activeProfile?.full_name === 'Abubakir' ? '1111' : activeProfile?.full_name === 'Muhammad' ? '2222' : '0000'}
+                <span className="text-slate-500 text-[11px]">
+                  Kassir yoki do'kon egasi PIN kodi
                 </span>
               )}
             </AnimatePresence>
@@ -233,7 +217,7 @@ export const LoginPage: React.FC = () => {
         </div>
 
         {/* Numeric Keypad (3x4) */}
-        <div className="grid grid-cols-3 gap-2 pt-1 max-w-[280px] mx-auto">
+        <div className="grid grid-cols-3 gap-2 pt-0.5 max-w-[280px] mx-auto">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
             <button
               key={digit}
@@ -279,8 +263,8 @@ export const LoginPage: React.FC = () => {
         </div>
 
         {/* Security hint footer */}
-        <div className="pt-2 text-center text-[10px] text-slate-500 font-medium">
-          Har bir qarz yozuvi yoki to‘lov tasdiqlanishi faol xodim nomiga biriktiriladi.
+        <div className="pt-1 text-center text-[10px] text-slate-500 font-medium">
+          Har bir qarz yozuvi yoki to‘lov tasdiqlanishi tizimga kirgan xodim nomiga biriktiriladi.
         </div>
       </div>
     </div>

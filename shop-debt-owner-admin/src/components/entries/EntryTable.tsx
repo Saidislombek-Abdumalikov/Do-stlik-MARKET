@@ -145,7 +145,7 @@ export const EntryTable: React.FC<EntryTableProps> = ({
                 </span>
                 {!isOpen && (
                   <span className="inline-flex items-center gap-1 text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-lg font-bold border border-emerald-300">
-                    ✅ Tasdiqladi: <strong className="text-emerald-950 font-black">{entry.confirmed_by_name || entry.confirmer_profile?.full_name || 'Muhammad'}</strong>
+                    ✅ Tasdiqladi: <strong className="text-emerald-950 font-black">{entry.confirmed_by_name || entry.confirmer_profile?.full_name || 'Sayfullo'}</strong>
                   </span>
                 )}
               </div>

@@ -583,8 +583,8 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
     setIsSettlingId(entry.id);
     try {
-      const adminId = profile?.id || 'user-muhammad';
-      const adminName = profile?.full_name || 'Muhammad';
+      const adminId = profile?.id || 'user-sayfullo';
+      const adminName = profile?.full_name || 'Sayfullo';
       await entriesService.payOrReduceDebt(
         entry.id,
         currentAmount,
