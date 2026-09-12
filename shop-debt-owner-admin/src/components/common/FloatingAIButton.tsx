@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import {
   Sparkles,
   Mic,
@@ -76,6 +76,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef<boolean>(false);
   const aiTimerRef = useRef<any>(null);
+  const dragControls = useDragControls();
 
   // Helper date generators
   const getTodayStr = () => new Date().toISOString().split('T')[0];
@@ -483,19 +484,41 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
               className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
             />
 
-            {/* Sheet Container: Tall, expansive pop-up screen (~82vh) with zero scrolling */}
+            {/* Sheet Container: Tall, scrollable pop-up screen (~85vh) with drag-to-close gesture */}
             <motion.div
+              drag="y"
+              dragControls={dragControls}
+              dragListener={false}
+              dragConstraints={{ top: 0 }}
+              dragElastic={{ top: 0, bottom: 0.5 }}
+              onDragEnd={(_e, info) => {
+                if (info.offset.y > 80 || info.velocity.y > 300) {
+                  handleClose();
+                }
+              }}
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="relative w-full max-w-md bg-slate-200 border-t border-slate-300 rounded-t-3xl p-4 sm:p-5 shadow-2xl z-10 text-slate-900 min-h-[570px] max-h-[85vh] flex flex-col justify-between overflow-hidden"
+              className="relative w-full max-w-md bg-slate-200 border-t border-slate-300 rounded-t-3xl p-4 sm:p-5 shadow-2xl z-10 text-slate-900 min-h-[570px] max-h-[88vh] flex flex-col justify-between overflow-y-auto"
             >
-              {/* Drag Handle Indicator */}
-              <div className="w-12 h-1.5 rounded-full bg-slate-400 mx-auto -mt-1 mb-1.5 shrink-0" />
+              {/* Top Drag Handle: Hold/Drag down to close */}
+              <div
+                onPointerDown={(e) => dragControls.start(e)}
+                className="w-full pt-0.5 pb-2 flex flex-col items-center justify-center cursor-grab active:cursor-grabbing touch-none select-none -mt-1 shrink-0 group"
+                title="Pastga tortib yopish"
+              >
+                <div className="w-14 h-1.5 rounded-full bg-slate-400 group-hover:bg-slate-500 transition-colors" />
+              </div>
 
-              {/* Header */}
-              <div className="flex items-center justify-between shrink-0 mb-1">
+              {/* Header: Also supports holding/dragging down to close */}
+              <div
+                onPointerDown={(e) => {
+                  if ((e.target as HTMLElement).closest('button')) return;
+                  dragControls.start(e);
+                }}
+                className="flex items-center justify-between shrink-0 mb-1 cursor-grab active:cursor-grabbing touch-none select-none"
+              >
                 <div className="flex items-center gap-2.5">
                   <div
                     className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-md shadow-violet-700/20"
