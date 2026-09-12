@@ -1,0 +1,25 @@
+# Environment variables (NEVER COMMIT)
+.env
+.env.*
+!.env.example
+*.env
+*.env.local
+shop-debt-owner-admin/.env
+shop-debt-owner-admin/.env.*
+!shop-debt-owner-admin/.env.example
+
+# Dependencies
+node_modules/
+shop-debt-owner-admin/node_modules/
+
+# Build outputs
+dist/
+shop-debt-owner-admin/dist/
+build/
+*.tsbuildinfo
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
