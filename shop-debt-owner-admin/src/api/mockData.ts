@@ -2,10 +2,10 @@ import { Entry, EntryHistory, AdminActionLog, Profile } from '../types/database'
 
 export const INITIAL_MOCK_PROFILES: Profile[] = [
   {
-    id: 'user-sohibboy',
+    id: '00000000-0000-0000-0000-000000000001',
     role: 'owner',
     full_name: 'Sohibboy',
-    phone: '+998901234567',
+    phone: '+998901234501',
     pin_code: '7777',
     avatar_color: 'from-violet-600 to-purple-600',
     is_active: true,
@@ -13,10 +13,10 @@ export const INITIAL_MOCK_PROFILES: Profile[] = [
     updated_at: new Date().toISOString(),
   },
   {
-    id: 'user-sayfullo',
+    id: '00000000-0000-0000-0000-000000000002',
     role: 'worker',
     full_name: 'Sayfullo',
-    phone: '+998902223344',
+    phone: '+998901234502',
     pin_code: '2222',
     avatar_color: 'from-emerald-600 to-teal-600',
     is_active: true,
@@ -24,12 +24,12 @@ export const INITIAL_MOCK_PROFILES: Profile[] = [
     updated_at: new Date().toISOString(),
   },
   {
-    id: 'user-abubakir',
+    id: '00000000-0000-0000-0000-000000000003',
     role: 'worker',
     full_name: 'Abubakir',
-    phone: '+998901112233',
+    phone: '+998901234503',
     pin_code: '1111',
-    avatar_color: 'from-blue-600 to-cyan-600',
+    avatar_color: 'from-blue-600 to-indigo-600',
     is_active: true,
     created_at: new Date(Date.now() - 50 * 86400000).toISOString(),
     updated_at: new Date().toISOString(),

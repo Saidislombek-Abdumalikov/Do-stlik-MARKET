@@ -87,12 +87,21 @@ export const entriesService = {
   // ── 1. PROFILES & WORKERS ──────────────────────────────────
   async getProfiles(): Promise<Profile[]> {
     if (isSupabaseConfigured()) {
-      const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      return data as Profile[];
+      try {
+        const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+        if (!error && data && data.length > 0) {
+          return data as Profile[];
+        }
+      } catch (err) {
+        console.warn('Supabase getProfiles failed, using local fallback:', err);
+      }
     }
     const current = getStored<Profile[]>(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
-    if (!current || current.length !== 3 || !current.some((p: Profile) => p.id === 'user-sohibboy')) {
+    if (
+      !current ||
+      current.length !== 3 ||
+      !current.some((p: Profile) => p.id === '00000000-0000-0000-0000-000000000001' || p.full_name === 'Sohibboy')
+    ) {
       setStored(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
       return INITIAL_MOCK_PROFILES;
     }
@@ -100,21 +109,25 @@ export const entriesService = {
   },
 
   async updatePinCode(userId: string, newPin: string): Promise<Profile> {
-    if (isSupabaseConfigured()) {
-      const { data, error } = await supabase
-        .from('profiles')
-        .update({ pin_code: newPin, updated_at: new Date().toISOString() })
-        .eq('id', userId)
-        .select()
-        .single();
-      if (error) throw error;
-      return data as Profile;
-    }
-
     const profiles = getStored<Profile[]>(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
     const updated = profiles.map((p) => (p.id === userId ? { ...p, pin_code: newPin, updated_at: new Date().toISOString() } : p));
     setStored(STORAGE_PROFILES, updated);
     const target = updated.find((p) => p.id === userId);
+
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .update({ pin_code: newPin, updated_at: new Date().toISOString() })
+          .eq('id', userId)
+          .select()
+          .single();
+        if (!error && data) return data as Profile;
+      } catch (err) {
+        console.warn('Supabase updatePinCode failed, saved locally:', err);
+      }
+    }
+
     if (!target) throw new Error('Foydalanuvchi topilmadi');
     return target;
   },
@@ -325,21 +338,25 @@ export const entriesService = {
   // ── 3. SINGLE ENTRY WITH HISTORY ───────────────────────────
   async getEntryById(id: string): Promise<{ entry: Entry; history: EntryHistory[] }> {
     if (isSupabaseConfigured()) {
-      const { data: entry, error: entryErr } = await supabase
-        .from('entries')
-        .select('*, creator_profile:profiles!created_by(*)')
-        .eq('id', id)
-        .single();
-      if (entryErr) throw entryErr;
+      try {
+        const { data: entry, error: entryErr } = await supabase
+          .from('entries')
+          .select('*, creator_profile:profiles!created_by(*)')
+          .eq('id', id)
+          .single();
+        if (entryErr) throw entryErr;
 
-      const { data: history, error: histErr } = await supabase
-        .from('entry_history')
-        .select('*')
-        .eq('entry_id', id)
-        .order('created_at', { ascending: false });
-      if (histErr) throw histErr;
+        const { data: history, error: histErr } = await supabase
+          .from('entry_history')
+          .select('*')
+          .eq('entry_id', id)
+          .order('created_at', { ascending: false });
+        if (histErr) throw histErr;
 
-      return { entry: entry as Entry, history: (history as EntryHistory[]) || [] };
+        return { entry: entry as Entry, history: (history as EntryHistory[]) || [] };
+      } catch (err) {
+        console.warn('Supabase getEntryById failed, fallback to local storage:', err);
+      }
     }
 
     const items = getStored<Entry[]>(STORAGE_ENTRIES, INITIAL_MOCK_ENTRIES);
@@ -466,71 +483,83 @@ export const entriesService = {
     const nowStr = new Date().toISOString();
 
     if (isSupabaseConfigured()) {
-      const validAdminId = isUUID(adminUser.id) ? adminUser.id : null;
-      // 1. Fetch before state
-      const { data: beforeData, error: befErr } = await supabase
-        .from('entries')
-        .select('*')
-        .eq('id', id)
-        .single();
-      if (befErr) throw befErr;
+      try {
+        const validAdminId = isUUID(adminUser.id) ? adminUser.id : null;
+        // 1. Fetch before state
+        const { data: beforeData, error: befErr } = await supabase
+          .from('entries')
+          .select('*')
+          .eq('id', id)
+          .single();
+        if (befErr) throw befErr;
 
-      // Handle paid_at auto-timestamping
-      let paidAtValue = updatedFields.paid_at;
-      if (updatedFields.status === 'paid' && !beforeData.paid_at && !paidAtValue) {
-        paidAtValue = nowStr;
-      } else if (updatedFields.status === 'open') {
-        paidAtValue = null;
-      }
-
-      const patch: any = {
-        ...updatedFields,
-        paid_at: paidAtValue,
-        last_edited_by: validAdminId,
-        updated_at: nowStr,
-      };
-      delete patch.creator_profile;
-
-      // 2. Perform update
-      const { data: updatedData, error: upErr } = await supabase
-        .from('entries')
-        .update(patch)
-        .eq('id', id)
-        .select('*, creator_profile:profiles!created_by(*)')
-        .single();
-      if (upErr) throw upErr;
-
-      // 3. Compute structured diff
-      const diffChanges: Record<string, { old: any; new: any }> = {};
-      Object.keys(updatedFields).forEach((k) => {
-        const key = k as keyof Entry;
-        if (beforeData[key] !== updatedData[key]) {
-          diffChanges[k] = { old: beforeData[key], new: updatedData[key] };
+        // Handle paid_at auto-timestamping
+        let paidAtValue = updatedFields.paid_at;
+        if (updatedFields.status === 'paid' && !beforeData.paid_at && !paidAtValue) {
+          paidAtValue = nowStr;
+        } else if (updatedFields.status === 'open') {
+          paidAtValue = null;
         }
-      });
 
-      // 4. Log in entry_history
-      await supabase.from('entry_history').insert({
-        entry_id: id,
-        changed_by: validAdminId,
-        changed_by_name: adminUser.name,
-        change_type: 'edited',
-        changes: diffChanges,
-        created_at: nowStr,
-      });
+        const patch: any = {
+          ...updatedFields,
+          paid_at: paidAtValue,
+          last_edited_by: validAdminId,
+          updated_at: nowStr,
+        };
+        delete patch.creator_profile;
 
-      // 5. Log in admin_action_log
-      await supabase.from('admin_action_log').insert({
-        admin_user_id: validAdminId,
-        admin_name: adminUser.name,
-        action_type: 'edit',
-        target_entry_id: id,
-        summary: `Qarz tahrirlandi: ${updatedData.party_name} (${updatedData.amount} so‘m)`,
-        before_data: beforeData,
-        after_data: updatedData,
-      });
+        // 2. Perform update
+        const { data: updatedData, error: upErr } = await supabase
+          .from('entries')
+          .update(patch)
+          .eq('id', id)
+          .select('*, creator_profile:profiles!created_by(*)')
+          .single();
+        if (upErr) throw upErr;
 
-      return updatedData as Entry;
+        // 3. Compute structured diff
+        const diffChanges: Record<string, { old: any; new: any }> = {};
+        Object.keys(updatedFields).forEach((k) => {
+          const key = k as keyof Entry;
+          if (beforeData[key] !== updatedData[key]) {
+            diffChanges[k] = { old: beforeData[key], new: updatedData[key] };
+          }
+        });
+
+        // 4. Log in entry_history
+        await supabase.from('entry_history').insert({
+          entry_id: id,
+          changed_by: validAdminId,
+          changed_by_name: adminUser.name,
+          change_type: 'edited',
+          changes: diffChanges,
+          created_at: nowStr,
+        });
+
+        // 5. Log in admin_action_log
+        await supabase.from('admin_action_log').insert({
+          admin_user_id: validAdminId,
+          admin_name: adminUser.name,
+          action_type: 'edit',
+          target_entry_id: id,
+          summary: `Qarz tahrirlandi: ${updatedData.party_name} (${updatedData.amount} so‘m)`,
+          before_data: beforeData,
+          after_data: updatedData,
+        });
+
+        // Also update local copy
+        const items = getStored<Entry[]>(STORAGE_ENTRIES, INITIAL_MOCK_ENTRIES);
+        setStored(
+          STORAGE_ENTRIES,
+          items.map((e) => (e.id === id ? (updatedData as Entry) : e))
+        );
+
+        return updatedData as Entry;
+      } catch (err) {
+        console.warn('Supabase updateEntry failed, saving locally and queuing:', err);
+        syncService.enqueue('update_entry', { id, ...updatedFields });
+      }
     }
 
     // Mock storage
@@ -608,13 +637,20 @@ export const entriesService = {
     adminUser: { id: string; name: string }
   ): Promise<void> {
     if (isSupabaseConfigured()) {
-      // Call atomic PostgreSQL RPC function
-      const { error } = await supabase.rpc('delete_entry_with_snapshot', {
-        p_entry_id: id,
-        p_reason: reason || 'Do‘kon egasi tomonidan o‘chirildi',
-      });
-      if (error) throw error;
-      return;
+      try {
+        // Call atomic PostgreSQL RPC function
+        const { error } = await supabase.rpc('delete_entry_with_snapshot', {
+          p_entry_id: id,
+          p_reason: reason || 'Do‘kon egasi tomonidan o‘chirildi',
+        });
+        if (!error) {
+          const localItems = getStored<Entry[]>(STORAGE_ENTRIES, INITIAL_MOCK_ENTRIES);
+          setStored(STORAGE_ENTRIES, localItems.filter((e) => e.id !== id));
+          return;
+        }
+      } catch (err) {
+        console.warn('Supabase delete RPC failed, fallback to local deletion:', err);
+      }
     }
 
     // Mock storage atomic simulation
@@ -805,13 +841,19 @@ export const entriesService = {
     let profiles: Profile[] = [];
 
     if (isSupabaseConfigured()) {
-      const { data: entriesData, error: eErr } = await supabase.from('entries').select('*');
-      if (eErr) throw eErr;
-      items = (entriesData as Entry[]) || [];
+      try {
+        const { data: entriesData, error: eErr } = await supabase.from('entries').select('*');
+        if (eErr) throw eErr;
+        items = (entriesData as Entry[]) || [];
 
-      const { data: profData, error: pErr } = await supabase.from('profiles').select('*');
-      if (pErr) throw pErr;
-      profiles = (profData as Profile[]) || [];
+        const { data: profData, error: pErr } = await supabase.from('profiles').select('*');
+        if (pErr) throw pErr;
+        profiles = (profData as Profile[]) || [];
+      } catch (err) {
+        console.warn('Supabase getDashboardMetrics failed, fallback to local storage:', err);
+        items = getStored<Entry[]>(STORAGE_ENTRIES, INITIAL_MOCK_ENTRIES);
+        profiles = getStored<Profile[]>(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
+      }
     } else {
       items = getStored<Entry[]>(STORAGE_ENTRIES, INITIAL_MOCK_ENTRIES);
       profiles = getStored<Profile[]>(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
@@ -848,18 +890,17 @@ export const entriesService = {
         if (entry.paid_at && entry.created_at) {
           const createdTime = new Date(entry.created_at).getTime();
           const paidTime = new Date(entry.paid_at).getTime();
-          if (paidTime >= createdTime) {
-            totalPaidDurationDays += (paidTime - createdTime) / 86400000;
-            paidWithDurationCount++;
-          }
+          const diffDays = Math.max(0, (paidTime - createdTime) / (1000 * 60 * 60 * 24));
+          totalPaidDurationDays += diffDays;
+          paidWithDurationCount++;
         }
       }
     });
 
     const averageTimeToPayment =
-      paidWithDurationCount > 0 ? totalPaidDurationDays / paidWithDurationCount : null;
+      paidWithDurationCount > 0 ? Math.round((totalPaidDurationDays / paidWithDurationCount) * 10) / 10 : 0;
 
-    // Build trend for last 7 periods/days
+    // Debt Trend
     const trendMap: Record<string, { newDebtAmount: number; paidAmount: number; entriesCount: number }> = {};
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
@@ -933,12 +974,16 @@ export const entriesService = {
   // ── 8. ADMIN ACTION LOGS ────────────────────────────────────
   async getAdminActionLogs(): Promise<AdminActionLog[]> {
     if (isSupabaseConfigured()) {
-      const { data, error } = await supabase
-        .from('admin_action_log')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data as AdminActionLog[]) || [];
+      try {
+        const { data, error } = await supabase
+          .from('admin_action_log')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data as AdminActionLog[]) || [];
+      } catch (err) {
+        console.warn('Supabase getAdminActionLogs failed, fallback to local storage:', err);
+      }
     }
     return getStored<AdminActionLog[]>(STORAGE_LOGS, INITIAL_MOCK_ACTION_LOGS);
   },

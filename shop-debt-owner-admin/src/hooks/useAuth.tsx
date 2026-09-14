@@ -38,9 +38,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const isLocked = localStorage.getItem('dostlik_is_locked') === 'true';
       const storedProfileId = localStorage.getItem('dostlik_active_profile_id');
 
-      // Sync fresh profiles from entriesService/localStorage
+      let freshProfiles = INITIAL_MOCK_PROFILES;
       try {
-        const freshProfiles = await entriesService.getProfiles();
+        freshProfiles = await entriesService.getProfiles();
         if (mounted) setProfiles(freshProfiles);
       } catch (err) {
         console.warn('Profiles load error:', err);
@@ -59,6 +59,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (prof && mounted) {
               setProfile(prof as Profile);
               setSelectedProfile(prof as Profile);
+            }
+          } else if (!isLocked && storedProfileId && mounted) {
+            // Fast PIN mode persistence across refreshes
+            const found = freshProfiles.find((p) => p.id === storedProfileId && p.is_active);
+            if (found) {
+              setUser({ id: found.id, email: `${found.id}@dostlikmarket.uz` });
+              setProfile(found);
+              setSelectedProfile(found);
             }
           }
         } catch (err) {

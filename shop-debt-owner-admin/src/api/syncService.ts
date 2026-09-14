@@ -99,6 +99,15 @@ export const syncService = {
             .eq('id', id);
           if (error) throw error;
           syncedCount++;
+        } else if (item.action === 'update_entry') {
+          const { id, ...patch } = item.payload;
+          delete patch.creator_profile;
+          const { error } = await supabase
+            .from('entries')
+            .update({ ...patch, updated_at: new Date().toISOString() })
+            .eq('id', id);
+          if (error) throw error;
+          syncedCount++;
         } else if (item.action === 'delete_entry') {
           const { id, reason } = item.payload;
           await supabase.rpc('delete_entry_with_snapshot', {
