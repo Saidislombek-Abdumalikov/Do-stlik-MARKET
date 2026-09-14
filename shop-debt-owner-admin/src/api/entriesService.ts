@@ -41,13 +41,6 @@ const getStored = <T>(key: string, initial: T): T => {
       localStorage.setItem(key, JSON.stringify(initial));
       return initial;
     }
-    if (key === STORAGE_ENTRIES && Array.isArray(parsed)) {
-      const cleaned = parsed.filter((e: any) => !e.id?.startsWith('entry-1'));
-      if (cleaned.length !== parsed.length) {
-        localStorage.setItem(key, JSON.stringify(cleaned));
-        return cleaned as T;
-      }
-    }
     return parsed;
   } catch {
     localStorage.setItem(key, JSON.stringify(initial));
@@ -257,21 +250,26 @@ export const entriesService = {
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
 
-      const { data, count, error } = await query
-        .order('created_at', { ascending: false })
-        .range(from, to);
+      try {
+        const { data, count, error } = await query
+          .order('created_at', { ascending: false })
+          .range(from, to);
 
-      if (error) throw error;
-      return { data: (data as Entry[]) || [], total: count || 0 };
+        if (error) throw error;
+        
+        // Merge any locally created entries not yet on server
+        const localItems = getStored<Entry[]>(STORAGE_ENTRIES, []);
+        const serverIds = new Set((data || []).map((e) => e.id));
+        const pendingLocal = localItems.filter((e) => !serverIds.has(e.id));
+
+        return { data: [...pendingLocal, ...((data as Entry[]) || [])], total: (count || 0) + pendingLocal.length };
+      } catch (err) {
+        console.warn('Supabase getEntries failed, fallback to local storage:', err);
+      }
     }
 
-    // Mock fallback with full filtering logic
+    // Local storage fallback with full filtering logic
     let items = getStored<Entry[]>(STORAGE_ENTRIES, INITIAL_MOCK_ENTRIES);
-    // Auto-heal old entries if they used old worker IDs
-    if (items.some((e) => e.created_by === 'worker-uuid-1' || (!e.recorded_by_name && e.created_by))) {
-      items = INITIAL_MOCK_ENTRIES;
-      setStored(STORAGE_ENTRIES, items);
-    }
     const profiles = getStored<Profile[]>(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
 
     if (filters.search?.trim()) {
@@ -366,7 +364,9 @@ export const entriesService = {
     newEntryData: Omit<Entry, 'id' | 'created_at' | 'updated_at' | 'creator_profile'>,
     adminUser: { id: string; name: string }
   ): Promise<Entry> {
-    const entryId = 'entry-' + Date.now();
+    const entryId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : 'entry-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
     const nowStr = new Date().toISOString();
 
     const entryToInsert: Entry = {
@@ -951,12 +951,22 @@ export const entriesService = {
     let allEntries: Entry[] = [];
 
     if (isSupabaseConfigured()) {
-      const { data, error } = await supabase
-        .from('entries')
-        .select('*, creator_profile:profiles!created_by(*)')
-        .eq('direction', 'customer');
-      if (error) throw error;
-      allEntries = (data as Entry[]) || [];
+      try {
+        const { data, error } = await supabase
+          .from('entries')
+          .select('*, creator_profile:profiles!created_by(*)')
+          .eq('direction', 'customer');
+        if (error) throw error;
+        
+        const localItems = getStored<Entry[]>(STORAGE_ENTRIES, []).filter((e) => e.direction === 'customer');
+        const dbIds = new Set((data || []).map((e) => e.id));
+        const missingLocal = localItems.filter((e) => !dbIds.has(e.id));
+        allEntries = [...missingLocal, ...((data as Entry[]) || [])];
+      } catch (err) {
+        console.warn('Supabase getCustomerSummaries failed, using local storage fallback:', err);
+        const items = getStored<Entry[]>(STORAGE_ENTRIES, INITIAL_MOCK_ENTRIES);
+        allEntries = items.filter((e) => e.direction === 'customer');
+      }
     } else {
       const items = getStored<Entry[]>(STORAGE_ENTRIES, INITIAL_MOCK_ENTRIES);
       allEntries = items.filter((e) => e.direction === 'customer');
