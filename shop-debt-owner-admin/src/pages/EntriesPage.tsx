@@ -46,8 +46,8 @@ export const EntriesPage: React.FC<EntriesPageProps> = ({ onNewEntryClick, initi
   const editMutation = useMutation({
     mutationFn: ({ id, updatedFields }: { id: string; updatedFields: Partial<Entry> }) =>
       entriesService.updateEntry(id, updatedFields, {
-        id: profile?.id || 'owner-uuid-1',
-        name: profile?.full_name || 'Do‘kon Egasi',
+        id: profile?.id || '00000000-0000-0000-0000-000000000001',
+        name: profile?.full_name || 'Sohibboy',
       }),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ['entries'] });

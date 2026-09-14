@@ -134,32 +134,16 @@ export const entriesService = {
 
   async toggleWorkerStatus(workerId: string, isActive: boolean, adminUser: { id: string; name: string }): Promise<void> {
     const summary = isActive ? 'Ishchi hisobi qayta faollashtirildi' : 'Ishchi hisobi faolsizlantirildi (to‘xtatildi)';
-    if (isSupabaseConfigured()) {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_active: isActive, updated_at: new Date().toISOString() })
-        .eq('id', workerId);
-      if (error) throw error;
 
-      await supabase.from('admin_action_log').insert({
-        admin_user_id: adminUser.id,
-        admin_name: adminUser.name,
-        action_type: isActive ? 'worker_activate' : 'worker_deactivate',
-        target_worker_id: workerId,
-        summary: `${summary} (ID: ${workerId})`,
-        metadata: { worker_id: workerId, is_active: isActive },
-      });
-      return;
-    }
-
+    // Update locally first
     const profiles = getStored<Profile[]>(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
     const updated = profiles.map((p) => (p.id === workerId ? { ...p, is_active: isActive } : p));
     setStored(STORAGE_PROFILES, updated);
 
-    // log action
+    // Log action locally
     const logs = getStored<AdminActionLog[]>(STORAGE_LOGS, INITIAL_MOCK_ACTION_LOGS);
     const newLog: AdminActionLog = {
-      id: 'action-' + Date.now(),
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'action-' + Date.now(),
       admin_user_id: adminUser.id,
       admin_name: adminUser.name,
       action_type: isActive ? 'worker_activate' : 'worker_deactivate',
@@ -169,10 +153,34 @@ export const entriesService = {
       created_at: new Date().toISOString(),
     };
     setStored(STORAGE_LOGS, [newLog, ...logs]);
+
+    if (isSupabaseConfigured() && typeof navigator !== 'undefined' && navigator.onLine) {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ is_active: isActive, updated_at: new Date().toISOString() })
+          .eq('id', workerId);
+        if (error) throw error;
+
+        const validAdminId = isUUID(adminUser.id) ? adminUser.id : null;
+        await supabase.from('admin_action_log').insert({
+          admin_user_id: validAdminId,
+          admin_name: adminUser.name,
+          action_type: isActive ? 'worker_activate' : 'worker_deactivate',
+          target_worker_id: isUUID(workerId) ? workerId : null,
+          summary: `${summary} (ID: ${workerId})`,
+          metadata: { worker_id: workerId, is_active: isActive },
+        });
+      } catch (err) {
+        console.warn('Supabase toggleWorkerStatus failed, saved locally:', err);
+      }
+    }
   },
 
   async addWorker(workerData: { fullName: string; phone: string; email?: string }, adminUser: { id: string; name: string }): Promise<Profile> {
-    const newId = 'worker-' + Date.now();
+    const newId = typeof crypto !== 'undefined' && crypto.randomUUID 
+      ? crypto.randomUUID() 
+      : '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0');
     const newProfile: Profile = {
       id: newId,
       role: 'worker',
@@ -183,30 +191,14 @@ export const entriesService = {
       updated_at: new Date().toISOString(),
     };
 
-    if (isSupabaseConfigured()) {
-      // Direct insert into profiles or via Supabase Admin Auth
-      const { data, error } = await supabase.from('profiles').insert(newProfile).select().single();
-      if (error) throw error;
-
-      await supabase.from('admin_action_log').insert({
-        admin_user_id: adminUser.id,
-        admin_name: adminUser.name,
-        action_type: 'worker_add',
-        target_worker_id: data.id,
-        summary: `Yangi ishchi qo‘shildi: ${workerData.fullName} (${workerData.phone})`,
-        after_data: data,
-      });
-
-      return data as Profile;
-    }
-
+    // Save locally first
     const profiles = getStored<Profile[]>(STORAGE_PROFILES, INITIAL_MOCK_PROFILES);
     setStored(STORAGE_PROFILES, [newProfile, ...profiles]);
 
     const logs = getStored<AdminActionLog[]>(STORAGE_LOGS, INITIAL_MOCK_ACTION_LOGS);
     setStored(STORAGE_LOGS, [
       {
-        id: 'action-' + Date.now(),
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'action-' + Date.now(),
         admin_user_id: adminUser.id,
         admin_name: adminUser.name,
         action_type: 'worker_add',
@@ -218,8 +210,30 @@ export const entriesService = {
       ...logs,
     ]);
 
+    if (isSupabaseConfigured() && typeof navigator !== 'undefined' && navigator.onLine) {
+      try {
+        const { data, error } = await supabase.from('profiles').insert(newProfile).select().single();
+        if (error) throw error;
+
+        const validAdminId = isUUID(adminUser.id) ? adminUser.id : null;
+        await supabase.from('admin_action_log').insert({
+          admin_user_id: validAdminId,
+          admin_name: adminUser.name,
+          action_type: 'worker_add',
+          target_worker_id: data.id,
+          summary: `Yangi ishchi qo‘shildi: ${workerData.fullName} (${workerData.phone})`,
+          after_data: data,
+        });
+
+        return data as Profile;
+      } catch (err) {
+        console.warn('Supabase addWorker failed, saved locally:', err);
+      }
+    }
+
     return newProfile;
   },
+
 
   // ── 2. ENTRIES LIST & FILTERS ──────────────────────────────
   async getEntries(
@@ -273,12 +287,45 @@ export const entriesService = {
         // Merge any locally created entries not yet on server
         const localItems = getStored<Entry[]>(STORAGE_ENTRIES, []);
         const serverIds = new Set((data || []).map((e) => e.id));
-        const pendingLocal = localItems.filter((e) => !serverIds.has(e.id));
+        let pendingLocal = localItems.filter((e) => !serverIds.has(e.id));
+
+        // Apply filters to pending local entries to prevent leaks
+        if (filters.search?.trim()) {
+          const s = filters.search.toLowerCase().trim();
+          pendingLocal = pendingLocal.filter(
+            (e) =>
+              e.party_name.toLowerCase().includes(s) ||
+              (e.party_phone && e.party_phone.includes(s)) ||
+              (e.description && e.description.toLowerCase().includes(s))
+          );
+        }
+        if (filters.status && filters.status !== 'all') {
+          pendingLocal = pendingLocal.filter((e) => e.status === filters.status);
+        }
+        if (filters.direction && filters.direction !== 'all') {
+          pendingLocal = pendingLocal.filter((e) => e.direction === filters.direction);
+        }
+        if (filters.workerId && filters.workerId !== 'all') {
+          pendingLocal = pendingLocal.filter((e) => e.created_by === filters.workerId);
+        }
+        if (filters.minAmount !== undefined && filters.minAmount > 0) {
+          pendingLocal = pendingLocal.filter((e) => e.amount >= filters.minAmount!);
+        }
+        if (filters.maxAmount !== undefined && filters.maxAmount > 0) {
+          pendingLocal = pendingLocal.filter((e) => e.amount <= filters.maxAmount!);
+        }
+        if (effectiveStart) {
+          pendingLocal = pendingLocal.filter((e) => e.created_at >= effectiveStart);
+        }
+        if (effectiveEnd) {
+          pendingLocal = pendingLocal.filter((e) => e.created_at <= effectiveEnd);
+        }
 
         return { data: [...pendingLocal, ...((data as Entry[]) || [])], total: (count || 0) + pendingLocal.length };
       } catch (err) {
         console.warn('Supabase getEntries failed, fallback to local storage:', err);
       }
+
     }
 
     // Local storage fallback with full filtering logic
@@ -436,6 +483,7 @@ export const entriesService = {
         const { data: inserted, error: insErr } = await supabase
           .from('entries')
           .insert({
+            id: isUUID(entryId) ? entryId : undefined,
             direction: newEntryData.direction,
             party_name: newEntryData.party_name,
             party_phone: newEntryData.party_phone,
@@ -448,6 +496,7 @@ export const entriesService = {
             recorded_by_name: adminUser.name,
             last_edited_by: validAdminId,
           })
+
           .select('*, creator_profile:profiles!created_by(*)')
           .single();
 

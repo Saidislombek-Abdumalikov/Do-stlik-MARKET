@@ -94,9 +94,25 @@ const HONORIFICS = [
 // O'zbek xalqona shevalari va og'zaki talaffuzlarini me'yoriy shaklga keltirish
 export function normalizeWord(w: string): string {
   let clean = w.trim().toLowerCase().replace(/[ʻʼ`´]/g, "'");
-  
-  // Strip common Uzbek case/plural suffixes (e.g. qossobga -> qossob, akfachidan -> akfachi)
-  clean = clean.replace(/(?:lardan|larga|larda|larni|larning|lar|dan|tan|ga|ka|qa|da|ta|ning|ni|chi|lik|li)$/, '');
+
+  // Protect common Uzbek names from accidental suffix truncation (Ali, Vali, Guli, Ziyoda, Saida, etc.)
+  const PRESERVE_NAMES = new Set([
+    'ali', 'vali', 'guli', 'ziyoda', 'saida', 'hamida', 'farida', 'mavluda',
+    'shahzoda', 'dilnoza', 'dilshod', 'otabek', 'katta', 'bolta', 'balka'
+  ]);
+  if (PRESERVE_NAMES.has(clean)) return clean;
+
+  // Strip compound plural / case suffixes if word is long enough
+  if (clean.length >= 7) {
+    clean = clean.replace(/(?:lardan|larga|larda|larni|larning|larniki)$/, '');
+  }
+  // Strip simple case suffixes (e.g. Farhodga -> Farhod, Akmaldan -> Akmal)
+  if (clean.length >= 6) {
+    clean = clean.replace(/(?:dan|tan|ning|larga|lardan)$/, '');
+  }
+  if (clean.length >= 5) {
+    clean = clean.replace(/(?:ga|ka|qa|ni)$/, '');
+  }
   clean = clean.trim();
   
   // Aka / Oka shevalari
@@ -156,34 +172,51 @@ export function levenshteinDistance(a: string, b: string): number {
 }
 
 // O'zbekona fonetik va shevaviy aqlli qidiruv (Smart Fuzzy Matcher)
+// Hech qachon qisqa ismlarni boshqa uzun ismlarga qorishtirmaydi (masalan, "Ali" ni "Alisher" ga aralashtirmaydi)
 export function fuzzyMatchUzbek(query: string, target: string): boolean {
   if (!query || !target) return false;
   const cleanQ = query.toLowerCase().replace(/[ʻʼ`´]/g, "'").trim();
   const cleanT = target.toLowerCase().replace(/[ʻʼ`´]/g, "'").trim();
 
-  // 1. To'g'ridan-to'g'ri o'z ichiga olishi
-  if (cleanT.includes(cleanQ) || cleanQ.includes(cleanT)) return true;
+  // 1. To'liq bir xil bo'lsa
+  if (cleanQ === cleanT) return true;
 
-  // 2. Normalizatsiya qilingan so'zlar bo'yicha
-  const qWords = cleanQ.split(/\s+/).map(normalizeWord).filter(Boolean);
-  const tWords = cleanT.split(/\s+/).map(normalizeWord).filter(Boolean);
+  // 2. So'z chegarasi bo'yicha boshlanishi yoki tugashi (masalan: "Farhod" va "Farhod aka")
+  if (cleanT.startsWith(cleanQ + ' ') || cleanT.endsWith(' ' + cleanQ) || cleanT.includes(' ' + cleanQ + ' ')) {
+    return true;
+  }
+  if (cleanQ.startsWith(cleanT + ' ') || cleanQ.endsWith(' ' + cleanT) || cleanQ.includes(' ' + cleanT + ' ')) {
+    return true;
+  }
 
-  // Agar so'zlardan biri mos kelsa (masalan "qossob" -> "qassob" va "abu qassob")
-  for (const qw of qWords) {
-    for (const tw of tWords) {
-      if (qw === tw) return true;
-      if (tw.includes(qw) || qw.includes(tw)) return true;
-      // Agar so'z 3 belgidan uzun bo'lsa va 1 ta harf farq qilsa
-      if (qw.length >= 3 && tw.length >= 3) {
-        const dist = levenshteinDistance(qw, tw);
-        if (dist <= 1) return true;
-        if (qw.length >= 5 && dist <= 2) return true;
+  // 3. Normalizatsiya qilingan so'zlar bo'yicha taqqoslash
+  const qWords = cleanQ.split(/\s+/).map(normalizeWord).filter((w) => w.length >= 2);
+  const tWords = cleanT.split(/\s+/).map(normalizeWord).filter((w) => w.length >= 2);
+
+  // Agar barcha so'zlar bir xil bo'lsa (tartibidan qat'i nazar)
+  if (qWords.length > 0 && tWords.length > 0) {
+    for (const qw of qWords) {
+      for (const tw of tWords) {
+        // To'liq so'z tengligi
+        if (qw === tw) return true;
+
+        // Faqat uzunligi yaqin bo'lgan so'zlarda fonetik tahrir masofasi (masalan Farxod <-> Farhod, Shohruh <-> Shoxrux)
+        // Hech qachon turli uzunlikdagi so'zlarni (Ali vs Alisher) aralashtirmaydi!
+        const lenDiff = Math.abs(qw.length - tw.length);
+        if (lenDiff <= 1 && qw.length >= 4 && tw.length >= 4) {
+          const dist = levenshteinDistance(qw, tw);
+          if (dist <= 1) return true;
+        } else if (lenDiff <= 2 && qw.length >= 6 && tw.length >= 6) {
+          const dist = levenshteinDistance(qw, tw);
+          if (dist <= 2) return true;
+        }
       }
     }
   }
 
   return false;
 }
+
 
 const STOP_WORDS = new Set([
   'non', "go'sht", 'gosht', "go'sh", 'gosh', 'un', 'shakar', "yog'", 'yog', 'sut', 'tuxum', 'choy',
@@ -354,11 +387,29 @@ function stripGrammarSuffixes(word: string): string {
   if (HONORIFICS.includes(w)) {
     return w;
   }
-  // Remove Uzbek plural and possessive/case suffixes
-  w = w.replace(/(?:larga|larning|lardan|lardi|larda|larniki|niki)$/i, '');
-  w = w.replace(/(?:ga|ka|qa|dan|tan|ning|ni|da)$/i, '');
+
+  // Protected name list
+  const PRESERVE_NAMES = new Set([
+    'ali', 'vali', 'guli', 'ziyoda', 'saida', 'hamida', 'farida', 'mavluda',
+    'shahzoda', 'dilnoza', 'dilshod', 'otabek', 'katta', 'bolta', 'balka'
+  ]);
+  if (PRESERVE_NAMES.has(w)) {
+    return w;
+  }
+
+  // Remove Uzbek plural and possessive/case suffixes (only if length >= 6)
+  if (w.length >= 6) {
+    w = w.replace(/(?:larga|larning|lardan|lardi|larda|larniki|niki)$/i, '');
+  }
+
+  // Remove dative/accusative/genitive/ablative case markers (e.g. Alisherga -> Alisher, Farhoddan -> Farhod)
+  // We do NOT strip 'da' here to prevent breaking female names (Ziyoda, Saida, Hamida, Shahzoda)
+  if (w.length >= 5 && !PRESERVE_NAMES.has(w)) {
+    w = w.replace(/(?:ga|ka|qa|dan|tan|ning|ni)$/i, '');
+  }
   return w;
 }
+
 
 export function extractCustomerName(rawText: string): string {
   const originalWords = rawText

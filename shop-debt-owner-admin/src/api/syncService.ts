@@ -77,14 +77,18 @@ export const syncService = {
             paid_at: entry.paid_at || null,
             recorded_by_name: entry.recorded_by_name || null,
           };
+          if (entry.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(entry.id)) {
+            toInsert.id = entry.id;
+          }
           if (entry.created_by && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(entry.created_by)) {
             toInsert.created_by = entry.created_by;
             toInsert.last_edited_by = entry.created_by;
           }
 
-          const { error } = await supabase.from('entries').insert(toInsert);
+          const { error } = await supabase.from('entries').upsert(toInsert);
           if (error) throw error;
           syncedCount++;
+
         } else if (item.action === 'pay_entry') {
           const { id, amount, status, paid_at, confirmed_by_name } = item.payload;
           const { error } = await supabase

@@ -176,27 +176,35 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
     const q = inputName.trim().toLowerCase();
     if (!q || q === 'mijoz') return null;
 
-    // Exact match
-    const exact = customerSummaries.find((c) => c.customer_name.toLowerCase() === q);
+    // 1. Exact match
+    const exact = customerSummaries.find((c) => c.customer_name.trim().toLowerCase() === q);
     if (exact) return exact;
 
-    // Inclusion
-    const inc = customerSummaries.find(
-      (c) => c.customer_name.toLowerCase().includes(q) || q.includes(c.customer_name.toLowerCase())
-    );
-    if (inc) return inc;
+    // 2. Word boundary match (e.g. "Farhod" matches "Farhod aka" or "Farhod Toshkent", but NEVER "Ali" matching "Alisher")
+    const boundaryMatch = customerSummaries.find((c) => {
+      const cName = c.customer_name.trim().toLowerCase();
+      if (cName.startsWith(q + ' ') || cName.endsWith(' ' + q) || cName.includes(' ' + q + ' ')) {
+        return true;
+      }
+      if (q.startsWith(cName + ' ') || q.endsWith(' ' + cName) || q.includes(' ' + cName + ' ')) {
+        return true;
+      }
+      return false;
+    });
+    if (boundaryMatch) return boundaryMatch;
 
-    // Token / nickname match
+    // 3. Token / nickname exact or phonetic match
     const tokenMatch = customerSummaries.find((c) => {
       const tokens = c.customer_name.toLowerCase().split(/[\s(),'‘`"/-]+/).filter((t) => t.length >= 2);
-      return tokens.some((t) => t.includes(q) || q.includes(t) || fuzzyMatchUzbek(q, t));
+      return tokens.some((t) => t === q || fuzzyMatchUzbek(q, t));
     });
     if (tokenMatch) return tokenMatch;
 
-    // Fuzzy match
+    // 4. Fuzzy match with phonetic checking
     const fuzzy = customerSummaries.find((c) => fuzzyMatchUzbek(q, c.customer_name));
     return fuzzy || null;
   };
+
 
   const handleSelectCustomer = (cust: CustomerSummary) => {
     setEditCustomerName(cust.customer_name);
@@ -530,7 +538,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
     setIsSaving(true);
     try {
-      const adminId = profile?.id || 'user-abubakir';
+      const adminId = profile?.id || '00000000-0000-0000-0000-000000000003';
       const adminName = profile?.full_name || 'Abubakir';
       const description =
         [
@@ -624,7 +632,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
     setIsSettlingId(entry.id);
     try {
-      const adminId = profile?.id || 'user-sayfullo';
+      const adminId = profile?.id || '00000000-0000-0000-0000-000000000002';
       const adminName = profile?.full_name || 'Sayfullo';
       await entriesService.payOrReduceDebt(
         entry.id,
