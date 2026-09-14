@@ -11,6 +11,7 @@ import { useAuth } from './hooks/useAuth';
 import { useRealtime } from './hooks/useRealtime';
 import { LoginPage } from './pages/LoginPage';
 import { FloatingAIButton } from './components/common/FloatingAIButton';
+import { syncService } from './api/syncService';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +31,16 @@ const AppContent: React.FC = () => {
 
   // Enable live Supabase realtime sync
   useRealtime();
+
+  // Enable offline-to-online auto sync
+  React.useEffect(() => {
+    const cleanup = syncService.initAutoSync(() => {
+      queryClient.invalidateQueries({ queryKey: ['entries'] });
+      queryClient.invalidateQueries({ queryKey: ['customerSummaries'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+    });
+    return cleanup;
+  }, []);
 
   if (isLoading) {
     return (

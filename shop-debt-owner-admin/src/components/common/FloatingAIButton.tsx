@@ -59,6 +59,9 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
   const [isListening, setIsListening] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isAiThinking, setIsAiThinking] = useState(false);
+  // Multi-stage AI reasoning state: 'idle' | 'listening' | 'analyzing' | 'grouping' | 'review'
+  const [aiStage, setAiStage] = useState<'idle' | 'listening' | 'analyzing' | 'grouping' | 'review'>('idle');
+  const spokenBufferRef = useRef<string>('');
 
   // Inline keyboard editable fields for Nasiya
   const [editCustomerName, setEditCustomerName] = useState('');
@@ -238,71 +241,66 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
   const allEntries: Entry[] = entriesData?.data || [];
 
-  // Parse text using Gemini AI with fallback to Turbo Engine
+  // Parse text using Gemini AI with fallback to Turbo Engine (Multi-stage reasoning)
   const runAiParse = async (rawText: string) => {
     const text = rawText.trim();
     if (!text) {
+      setAiStage('idle');
       return;
     }
 
+    // Stage 1: Analyzing
+    setAiStage('analyzing');
     setIsAiThinking(true);
+
+    // Short pause so user sees and feels the AI carefully thinking and analyzing pure Uzbek words
+    await new Promise((r) => setTimeout(r, 600));
+
+    let parsedResult: {
+      customer_name?: string;
+      amount?: number;
+      items?: string;
+      phone?: string | null;
+      due_condition?: string;
+    } | null = null;
+
     try {
-      // 1. Try Google Gemini AI first (handles Uzbek dialect, "qossob", "rosil", "akfachi")
+      // 1. Try Google Gemini AI first
       const geminiData = await parseNasiyaWithGemini(text);
       if (geminiData && (geminiData.customer_name || geminiData.amount > 0)) {
-        if (geminiData.customer_name && geminiData.customer_name !== 'Mijoz') {
-          const matched = findMatchingExistingCustomer(geminiData.customer_name);
-          if (matched) {
-            setEditCustomerName(matched.customer_name);
-            if (matched.customer_phone && !editPhone) {
-              setEditPhone(matched.customer_phone);
-            }
-            setSelectedCustomerMeta(matched);
-          } else {
-            setEditCustomerName(geminiData.customer_name);
-          }
-        }
-        if (geminiData.amount > 0) {
-          setEditAmount(String(geminiData.amount));
-        }
-        if (geminiData.items) {
-          setEditItems(geminiData.items);
-        }
-        if (geminiData.phone) {
-          setEditPhone(geminiData.phone);
-        }
-        if (geminiData.due_condition) {
-          setEditDueCondition(geminiData.due_condition);
-          const cond = geminiData.due_condition.toLowerCase();
-          if (cond.includes('erta')) {
-            setDueType('tomorrow');
-            setDueDate(getTomorrowStr());
-          } else if (cond.includes('3 kun')) {
-            setDueType('3days');
-            setDueDate(getDaysLaterStr(3));
-          } else if (cond.includes('hafta')) {
-            setDueType('1week');
-            setDueDate(getDaysLaterStr(7));
-          } else if (cond.includes('bugun')) {
-            setDueType('today');
-            setDueDate(getTodayStr());
-          }
-        }
-        setIsAiThinking(false);
-        return;
+        parsedResult = geminiData;
       }
     } catch (err) {
       console.warn('Gemini AI parse error, fallback to local turbo:', err);
-    } finally {
-      setIsAiThinking(false);
     }
 
-    // 2. Fallback to Local Turbo Engine
-    const res = parseTurboNasiyaText(text);
-    if (res.transactions.length > 0) {
-      const t = res.transactions[0];
-      if (t.customer_name && t.customer_name !== 'Mijoz') {
-        const matched = findMatchingExistingCustomer(t.customer_name);
+    // 2. Fallback to Local Turbo Engine if Gemini did not respond
+    if (!parsedResult) {
+      const res = parseTurboNasiyaText(text);
+      if (res.transactions.length > 0) {
+        const t = res.transactions[0];
+        const itemsStr = t.items && t.items.length > 0
+          ? t.items.map((it) => `${it.quantity ? it.quantity + ' ' : ''}${it.unit ? it.unit + ' ' : ''}${it.name}`).join(', ')
+          : '';
+        const phoneMatch = text.match(/(?:\+?998)?[ -]?(?:9[01345789]|33|88|99)[ -]?\d{3}[ -]?\d{2}[ -]?\d{2}/);
+
+        parsedResult = {
+          customer_name: t.customer_name,
+          amount: t.amount,
+          items: itemsStr,
+          due_condition: t.due_condition || 'Bugun',
+          phone: phoneMatch ? phoneMatch[0].trim() : null,
+        };
+      }
+    }
+
+    // Stage 2: Grouping
+    setAiStage('grouping');
+    await new Promise((r) => setTimeout(r, 500));
+
+    if (parsedResult) {
+      if (parsedResult.customer_name && parsedResult.customer_name !== 'Mijoz') {
+        const matched = findMatchingExistingCustomer(parsedResult.customer_name);
         if (matched) {
           setEditCustomerName(matched.customer_name);
           if (matched.customer_phone && !editPhone) {
@@ -310,44 +308,40 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
           }
           setSelectedCustomerMeta(matched);
         } else {
-          setEditCustomerName(t.customer_name);
+          setEditCustomerName(parsedResult.customer_name);
         }
       }
-      if (t.amount > 0) {
-        setEditAmount(String(t.amount));
+      if (parsedResult.amount && parsedResult.amount > 0) {
+        setEditAmount(String(parsedResult.amount));
       }
-      if (t.items && t.items.length > 0) {
-        const itemsStr = t.items
-          .map(
-            (it) =>
-              `${it.quantity ? it.quantity + ' ' : ''}${it.unit ? it.unit + ' ' : ''}${it.name}`
-          )
-          .join(', ');
-        setEditItems(itemsStr);
+      if (parsedResult.items) {
+        setEditItems(parsedResult.items);
       }
-      if (t.due_date) {
-        setDueDate(t.due_date);
-        if (t.due_condition === 'ertaga') {
-          setDueType('tomorrow');
-          setEditDueCondition('Ertaga');
-        } else {
-          setDueType('custom');
-          setEditDueCondition(t.due_condition || t.due_date);
-        }
-      } else if (t.due_condition) {
-        setEditDueCondition(t.due_condition);
-        if (t.due_condition === 'ertaga') {
+      if (parsedResult.phone) {
+        setEditPhone(parsedResult.phone);
+      }
+      if (parsedResult.due_condition) {
+        setEditDueCondition(parsedResult.due_condition);
+        const cond = parsedResult.due_condition.toLowerCase();
+        if (cond.includes('erta')) {
           setDueType('tomorrow');
           setDueDate(getTomorrowStr());
+        } else if (cond.includes('3 kun')) {
+          setDueType('3days');
+          setDueDate(getDaysLaterStr(3));
+        } else if (cond.includes('hafta')) {
+          setDueType('1week');
+          setDueDate(getDaysLaterStr(7));
+        } else if (cond.includes('bugun')) {
+          setDueType('today');
+          setDueDate(getTodayStr());
         }
       }
-
-      // Check for phone number in text
-      const phoneMatch = text.match(/(?:\+?998)?[ -]?(?:9[01345789]|33|88|99)[ -]?\d{3}[ -]?\d{2}[ -]?\d{2}/);
-      if (phoneMatch) {
-        setEditPhone(phoneMatch[0].trim());
-      }
     }
+
+    setIsAiThinking(false);
+    // Stage 3: Ready for confirmation review
+    setAiStage('review');
   };
 
   // Keep inputTextRef synced with inputText
@@ -424,8 +418,10 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
       isListeningRef.current = true;
       setIsListening(true);
-
-      const baseText = target === 'nasiya' ? inputTextRef.current : '';
+      if (target === 'nasiya') {
+        setAiStage('listening');
+        spokenBufferRef.current = '';
+      }
 
       // Set initial generous 8-second grace period for the user to start speaking
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
@@ -444,13 +440,12 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
           fullTranscript += event.results[i][0].transcript + ' ';
         }
 
-        const combined = (baseText ? `${baseText} ` : '') + fullTranscript.trim();
-        if (combined.trim()) {
-          if (target === 'nasiya') {
-            setInputText(combined);
-          } else {
-            setSearchQuery(combined);
-          }
+        const trimmed = fullTranscript.trim();
+        if (target === 'nasiya') {
+          // Keep in hidden buffer so words do not blink/distract user during speech
+          spokenBufferRef.current = trimmed;
+        } else {
+          setSearchQuery(trimmed);
         }
 
         // Reset silence timer: allow 3.5 full seconds of pause before concluding
@@ -471,6 +466,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
           isListeningRef.current = false;
           setIsListening(false);
+          setAiStage('idle');
         }
       };
 
@@ -478,9 +474,15 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         isListeningRef.current = false;
         setIsListening(false);
-        // When speech finishes, run AI parse once calmly on the complete text
-        if (target === 'nasiya' && inputTextRef.current.trim()) {
-          runAiParse(inputTextRef.current.trim());
+        // When speech finishes, reveal transcription and trigger multi-stage AI reasoning calmly
+        if (target === 'nasiya') {
+          const finalSpoken = spokenBufferRef.current.trim();
+          if (finalSpoken) {
+            setInputText(finalSpoken);
+            runAiParse(finalSpoken);
+          } else {
+            setAiStage('idle');
+          }
         }
       };
 
@@ -793,83 +795,105 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                 <div className="flex-1 flex flex-col justify-between space-y-2.5 pt-0.5 min-h-0">
                   {/* Omnibox / Speech Input */}
                   <div className="relative bg-slate-100 border border-slate-300 rounded-2xl p-2.5 focus-within:border-violet-600 focus-within:bg-white transition-all shadow-2xs shrink-0">
-                    <textarea
-                      rows={2}
-                      value={inputText}
-                      onChange={(e) => setInputText(e.target.value)}
-                      placeholder="Ovoz yoki matn: 'Abu qossopga 50 mingli go'sh, ertaga kechga'..."
-                      className="w-full bg-transparent text-xs text-slate-900 placeholder-slate-500 resize-none focus:outline-none pr-20 font-medium leading-relaxed"
-                    />
+                    {isListening ? (
+                      /* Calm voice recording screen - words are kept hidden so cashier is not distracted! */
+                      <div className="py-2.5 px-3 flex items-center justify-between bg-violet-50/80 border border-violet-200 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <div className="relative flex items-center justify-center">
+                            <span className="w-3.5 h-3.5 rounded-full bg-rose-600 animate-ping absolute" />
+                            <span className="w-3.5 h-3.5 rounded-full bg-rose-600 relative" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-slate-900 leading-tight">
+                              Eshitilmoqda... Bemalol gapiring
+                            </p>
+                            <p className="text-[10.5px] text-slate-500 font-medium">
+                              Gapirib bo‘lgach, AI to‘liq tahlil qilib beradi
+                            </p>
+                          </div>
+                        </div>
 
-                    {/* Microphone & AI Button */}
-                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                      {inputText.trim() && (
                         <button
                           type="button"
-                          onClick={() => runAiParse(inputText)}
-                          disabled={isAiThinking}
-                          className="px-2 py-1 rounded-lg bg-violet-100 hover:bg-violet-200 text-violet-800 border border-violet-300 text-xs font-black cursor-pointer flex items-center gap-1 shadow-2xs"
-                          title="AI Tahlil"
+                          onClick={() => {
+                            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+                            isListeningRef.current = false;
+                            setIsListening(false);
+                            if (recognitionRef.current) {
+                              try { recognitionRef.current.stop(); } catch {}
+                            }
+                            const finalSpoken = spokenBufferRef.current.trim();
+                            if (finalSpoken) {
+                              setInputText(finalSpoken);
+                              runAiParse(finalSpoken);
+                            } else {
+                              setAiStage('idle');
+                            }
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-3 py-1.5 rounded-xl text-xs cursor-pointer shadow-sm transition-all active:scale-95 flex items-center gap-1 shrink-0"
                         >
-                          <Sparkles className="w-3 h-3 text-violet-700" />
-                          <span>AI</span>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Tayyor</span>
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => toggleSpeechRecognition('nasiya')}
-                        className={`p-2 rounded-xl transition-all cursor-pointer ${
-                          isListening
-                            ? 'bg-rose-700 text-white shadow-md shadow-rose-700/50'
-                            : 'bg-slate-300 text-violet-800 hover:bg-slate-400 border border-slate-400/40'
-                        }`}
-                        title={isListening ? 'Eshitishni to‘xtatish' : 'Ovoz bilan aytish'}
-                      >
-                        {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                      </button>
-                    </div>
+                      </div>
+                    ) : (
+                      <textarea
+                        rows={2}
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        placeholder="Ovoz yoki matn: 'Farhod oka 30 000', 'Abu qossopga 50 ming go'sh'..."
+                        className="w-full bg-transparent text-xs text-slate-900 placeholder-slate-500 resize-none focus:outline-none pr-20 font-medium leading-relaxed"
+                      />
+                    )}
+
+                    {/* Microphone & AI Button (when not listening) */}
+                    {!isListening && (
+                      <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                        {inputText.trim() && (
+                          <button
+                            type="button"
+                            onClick={() => runAiParse(inputText)}
+                            disabled={isAiThinking}
+                            className="px-2 py-1 rounded-lg bg-violet-100 hover:bg-violet-200 text-violet-800 border border-violet-300 text-xs font-black cursor-pointer flex items-center gap-1 shadow-2xs"
+                            title="AI Tahlil"
+                          >
+                            <Sparkles className="w-3 h-3 text-violet-700" />
+                            <span>AI</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => toggleSpeechRecognition('nasiya')}
+                          className="p-2 rounded-xl transition-all cursor-pointer bg-violet-700 text-white hover:bg-violet-800 shadow-md shadow-violet-700/30 border border-violet-800"
+                          title="Ovoz bilan aytish"
+                        >
+                          <Mic className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Stable status line (zero layout trembling) */}
+                  {/* Multi-stage AI Reasoning Status Line */}
                   <div className="min-h-[28px] flex items-center justify-between text-xs shrink-0 px-1">
-                    {isListening ? (
-                      <div className="flex items-center justify-between text-rose-700 bg-rose-100/90 border border-rose-300 px-3 py-1 rounded-xl w-full gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping shrink-0" />
-                          <span className="font-bold truncate">Eshitilmoqda... (Bemalol gapiring)</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-                              isListeningRef.current = false;
-                              setIsListening(false);
-                              if (recognitionRef.current) {
-                                try { recognitionRef.current.stop(); } catch {}
-                              }
-                              if (inputTextRef.current.trim()) {
-                                runAiParse(inputTextRef.current.trim());
-                              }
-                            }}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-2 py-0.5 rounded-lg text-xs cursor-pointer shadow-xs transition-colors"
-                            title="Yozishni yakunlash va tahlil qilish"
-                          >
-                            Tayyor ✅
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => toggleSpeechRecognition('nasiya')}
-                            className="font-bold text-rose-800 hover:underline cursor-pointer text-[11px]"
-                          >
-                            To‘xtatish
-                          </button>
-                        </div>
+                    {aiStage === 'listening' ? (
+                      <div className="flex items-center gap-2 text-violet-900 text-xs font-bold w-full bg-violet-100/90 border border-violet-300 px-3 py-1 rounded-xl">
+                        <Mic className="w-3.5 h-3.5 text-violet-700 animate-pulse shrink-0" />
+                        <span className="truncate">Ovoz yozilmoqda... Tugatgach "Tayyor"ni bosing</span>
                       </div>
-                    ) : isAiThinking ? (
-                      <div className="flex items-center gap-2 px-3 py-1 bg-violet-100 border border-violet-300 rounded-xl text-violet-900 text-xs font-bold w-full">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-700 shrink-0" />
-                        <span className="truncate">✨ Gemini AI tahlil qilmoqda...</span>
+                    ) : aiStage === 'analyzing' ? (
+                      <div className="flex items-center gap-2 px-3 py-1 bg-amber-100 border border-amber-300 rounded-xl text-amber-900 text-xs font-black w-full animate-pulse">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-700 shrink-0" />
+                        <span className="truncate">1-bosqich: Ovoz va so‘zlar tahlil qilinmoqda...</span>
+                      </div>
+                    ) : aiStage === 'grouping' ? (
+                      <div className="flex items-center gap-2 px-3 py-1 bg-sky-100 border border-sky-300 rounded-xl text-sky-900 text-xs font-black w-full animate-pulse">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-700 shrink-0" />
+                        <span className="truncate">2-bosqich: Mijoz, summa va muddat guruhlanmoqda...</span>
+                      </div>
+                    ) : aiStage === 'review' ? (
+                      <div className="flex items-center gap-2 px-3 py-1 bg-emerald-100 border border-emerald-300 rounded-xl text-emerald-900 text-xs font-black w-full">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                        <span className="truncate">3-bosqich: AI tushundi! Maʼlumotlarni tekshiring va tasdiqlang:</span>
                       </div>
                     ) : (
                       <span className="text-[11px] text-slate-500 font-medium">
@@ -1112,22 +1136,31 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                     </div>
                   </div>
 
-                  {/* Prominent Direct Save Button */}
+                  {/* Prominent Direct Save & Confirm Button */}
                   <button
                     type="button"
                     disabled={isSaving || !editCustomerName.trim() || !editAmount || Number(editAmount) <= 0}
                     onClick={handleDirectSave}
-                    className="w-full py-3 px-4 bg-violet-700 hover:bg-violet-800 active:bg-violet-900 disabled:opacity-40 text-white rounded-2xl font-black text-sm shadow-lg shadow-violet-900/30 border border-violet-800/50 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] shrink-0"
+                    className={`w-full py-3.5 px-4 text-white rounded-2xl font-black text-sm shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] shrink-0 ${
+                      editCustomerName.trim() && Number(editAmount) > 0
+                        ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-emerald-800/30 border border-emerald-500'
+                        : 'bg-violet-700 hover:bg-violet-800 active:bg-violet-900 disabled:opacity-40 shadow-violet-900/30 border border-violet-800/50'
+                    }`}
                   >
                     {isSaving ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span>Daftarga yozilmoqda...</span>
                       </>
+                    ) : editCustomerName.trim() && Number(editAmount) > 0 ? (
+                      <>
+                        <CheckCircle2 className="w-5 h-5" />
+                        <span>Tasdiqlash va Saqlash ({formatMoney(Number(editAmount))})</span>
+                      </>
                     ) : (
                       <>
                         <CheckCircle2 className="w-4 h-4" />
-                        <span>Daftarga yozish {Number(editAmount) > 0 ? `(${formatMoney(Number(editAmount))})` : ''}</span>
+                        <span>Daftarga yozish</span>
                       </>
                     )}
                   </button>

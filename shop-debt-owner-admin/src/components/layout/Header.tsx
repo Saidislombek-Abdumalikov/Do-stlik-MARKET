@@ -50,9 +50,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAIDrawer }) => {
             DM
           </div>
           <div>
-            <span className="font-black text-slate-900 text-xs sm:text-sm tracking-tight block leading-tight">
-              Do'stlik MARKET
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-black text-slate-900 text-xs sm:text-sm tracking-tight block leading-tight">
+                Do'stlik MARKET
+              </span>
+              <span
+                className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-200"
+                title="Mahalliy xotira faol (offline rejim himoyalangan)"
+              />
+            </div>
             <span className="text-[10px] text-slate-500 font-bold block">
               Nasiya Daftari
             </span>

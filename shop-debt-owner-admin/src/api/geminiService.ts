@@ -22,28 +22,41 @@ export async function parseNasiyaWithGemini(userText: string): Promise<GeminiNas
     return null;
   }
 
-  const prompt = `Sen O'zbek do'konlari uchun "Nasiya Daftari" aqlli AI yordamchisisan.
-Sotuvchi yoki kassir do'konda o'zbek tilida, xalqona lahja va shevalarda gapiradi.
-Masalan:
-- "Farhod oka 30 000" yoki "Farxod okaga 30 000" -> customer_name: "Farhod aka", amount: 30000
-- "Qossobga 50 ming go'sh" -> customer_name: "Sardor qassob", amount: 50000, items: "go'sht"
-- "Akmal akamga 120 000" -> customer_name: "Akmal aka", amount: 120000
-- "Olim aka 25 ming" -> customer_name: "Olim aka", amount: 25000
+  const prompt = `Sen O'zbekiston do'konlari uchun sof o'zbek tilida ishlaydigan "Nasiya Daftari" AI tahlilchisisan.
+Sening vazifang: Sotuvchi yoki kassir aytgan gapni diqqat bilan eshitish, chuqur tahlil qilish, mantiqan guruhlash va to'g'ri JSON formatida chiqarish.
 
-QOIDALAR:
-1. "oka", "okam", "okaga", "akamga" so'zlari hurmat yuzasidan "aka" deb yozilsin.
-2. "Farxod" -> "Farhod".
-3. Summa doim so'mda son qilib (masalan 30000) chiqarilsin. 30 000 yoki o'ttiz ming 30000 bo'ladi (3000 emas!).
-4. Javobni FAQAT quyidagi JSON formatida qaytar:
+TAHLIL VA GURUHLASH BOSQICHLARI:
+1. MIJOZ ISMI / LAQABI:
+   - "Farhod oka", "Farxod oka", "Farhod okaga", "Farxod okaga" -> "Farhod aka"
+   - "Abu qossop", "Qossopga", "Qassob" -> "Qassob" yoki agar ism bo'lsa "Abu qassob"
+   - "Akmal akamga", "Akmal oka" -> "Akmal aka"
+   - "Ustam", "Ustaga", "Sardor usta" -> "Sardor usta"
+   - "Qo'shni", "Nodira opa", "Olim aka" kabi hurmat so'zlarini to'g'ri normallashtir.
+
+2. SUMMA (PUL):
+   - Xalq tilidagi barcha summalar aniq so'mda son qilib hisoblansin:
+   - "30 000" yoki "o'ttiz ming" -> 30000 (hech qachon 3000 emas!)
+   - "50 ming", "ellik ming" -> 50000
+   - "145 ming" -> 145000
+   - "1 yarim million", "1.5 mln" -> 1500000
+   - "Farhod aka 30" (do'konda 10-999 oralig'ida birliksiz aytilsa minglik deb tushun) -> 30000
+
+3. MAHSULOTLAR (ITEMS):
+   - Masalan: "2 ta non, 1 kg go'sht", "yog', shakar", "50 mingli go'sh" -> items: "go'sht"
+
+4. MUDDAT (DUE_CONDITION):
+   - "ertaga", "bugun kechga", "3 kunda", "hafta oxirida", "oylikda", "pensiyada" kabi shartlarni ajratib ol.
+
+FAQAT va FAQAT quyidagi JSON formatida javob ber:
 {
   "customer_name": "Farhod aka",
   "amount": 30000,
   "items": "olingan tovarlar",
-  "due_condition": "ertaga",
+  "due_condition": "Bugun",
   "phone": null
 }
 
-Foydalanuvchi aytgan gap: "${text.replace(/"/g, '\\"')}"`;
+Sotuvchining gapi: "${text.replace(/"/g, '\\"')}"`;
 
   try {
     const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];

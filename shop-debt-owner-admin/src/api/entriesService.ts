@@ -15,6 +15,7 @@ import {
   INITIAL_MOCK_ACTION_LOGS,
   INITIAL_MOCK_PROFILES,
 } from './mockData';
+import { syncService } from './syncService';
 
 // Local storage keys for interactive demo fallback
 const STORAGE_ENTRIES = 'dostlik_entries';
@@ -378,50 +379,7 @@ export const entriesService = {
       updated_at: nowStr,
     };
 
-    if (isSupabaseConfigured()) {
-      const validAdminId = isUUID(adminUser.id) ? adminUser.id : null;
-      const { data: inserted, error: insErr } = await supabase
-        .from('entries')
-        .insert({
-          direction: newEntryData.direction,
-          party_name: newEntryData.party_name,
-          party_phone: newEntryData.party_phone,
-          amount: newEntryData.amount,
-          status: newEntryData.status,
-          description: newEntryData.description,
-          due_date: newEntryData.due_date,
-          paid_at: newEntryData.status === 'paid' ? nowStr : null,
-          created_by: validAdminId,
-          recorded_by_name: adminUser.name,
-          last_edited_by: validAdminId,
-        })
-        .select('*, creator_profile:profiles!created_by(*)')
-        .single();
-      if (insErr) throw insErr;
-
-      // Log in entry_history
-      await supabase.from('entry_history').insert({
-        entry_id: inserted.id,
-        changed_by: validAdminId,
-        changed_by_name: adminUser.name,
-        change_type: 'created',
-        new_value: inserted,
-      });
-
-      // Log in admin_action_log
-      await supabase.from('admin_action_log').insert({
-        admin_user_id: validAdminId,
-        admin_name: adminUser.name,
-        action_type: 'manual_add',
-        target_entry_id: inserted.id,
-        summary: `Yangi ${inserted.direction === 'customer' ? 'mijoz' : 'yetkazib beruvchi'} qarzi qo‘lda kiritildi: ${inserted.party_name} (${inserted.amount} so‘m)`,
-        after_data: inserted,
-      });
-
-      return inserted as Entry;
-    }
-
-    // Mock storage
+    // 1. ALWAYS persist to LocalStorage first (Guarantees zero data loss even offline)
     const items = getStored<Entry[]>(STORAGE_ENTRIES, INITIAL_MOCK_ENTRIES);
     setStored(STORAGE_ENTRIES, [entryToInsert, ...items]);
 
@@ -447,12 +405,54 @@ export const entriesService = {
         admin_name: adminUser.name,
         action_type: 'manual_add',
         target_entry_id: entryId,
-        summary: `Yangi ${entryToInsert.direction === 'customer' ? 'mijoz' : 'yetkazib beruvchi'} qarzi qo‘lda kiritildi: ${entryToInsert.party_name} (${entryToInsert.amount} so‘m)`,
+        summary: `Yangi ${entryToInsert.direction === 'customer' ? 'mijoz' : 'yetkazib beruvchi'} qarzi yozildi: ${entryToInsert.party_name} (${entryToInsert.amount} so‘m)`,
         after_data: entryToInsert,
         created_at: nowStr,
       },
       ...logs,
     ]);
+
+    // 2. If Supabase is configured and online, attempt to upload to database
+    if (isSupabaseConfigured() && typeof navigator !== 'undefined' && navigator.onLine) {
+      try {
+        const validAdminId = isUUID(adminUser.id) ? adminUser.id : null;
+        const { data: inserted, error: insErr } = await supabase
+          .from('entries')
+          .insert({
+            direction: newEntryData.direction,
+            party_name: newEntryData.party_name,
+            party_phone: newEntryData.party_phone,
+            amount: newEntryData.amount,
+            status: newEntryData.status,
+            description: newEntryData.description,
+            due_date: newEntryData.due_date,
+            paid_at: newEntryData.status === 'paid' ? nowStr : null,
+            created_by: validAdminId,
+            recorded_by_name: adminUser.name,
+            last_edited_by: validAdminId,
+          })
+          .select('*, creator_profile:profiles!created_by(*)')
+          .single();
+
+        if (insErr) throw insErr;
+
+        if (inserted) {
+          // Update local copy with database generated ID if applicable
+          const updatedItems = getStored<Entry[]>(STORAGE_ENTRIES, INITIAL_MOCK_ENTRIES).map(
+            (e) => (e.id === entryId ? { ...inserted, creator_profile: inserted.creator_profile } : e)
+          );
+          setStored(STORAGE_ENTRIES, updatedItems);
+          return inserted as Entry;
+        }
+      } catch (dbErr) {
+        console.warn('Supabase ga darhol yozilmadi, oflayn navbatga olindi:', dbErr);
+        // Enqueue for background sync
+        syncService.enqueue('create_entry', entryToInsert);
+      }
+    } else if (isSupabaseConfigured()) {
+      // Offline: enqueue
+      syncService.enqueue('create_entry', entryToInsert);
+    }
 
     return entryToInsert;
   },
@@ -662,73 +662,7 @@ export const entriesService = {
     const nowStr = new Date().toISOString();
     const validAdminId = isUUID(adminUser.id) ? adminUser.id : null;
 
-    if (isSupabaseConfigured()) {
-      const { data: existing, error: getErr } = await supabase
-        .from('entries')
-        .select('*')
-        .eq('id', id)
-        .single();
-      if (getErr) throw getErr;
-
-      const currentAmount = Number(existing.amount) || 0;
-      const isFullyPaid = paidAmount >= currentAmount;
-      const newAmount = isFullyPaid ? currentAmount : currentAmount - paidAmount;
-      const newStatus = isFullyPaid ? 'paid' : 'open';
-
-      const { data: updated, error: updErr } = await supabase
-        .from('entries')
-        .update({
-          status: newStatus,
-          paid_at: isFullyPaid ? nowStr : existing.paid_at,
-          amount: newAmount,
-          confirmed_by: isFullyPaid ? validAdminId : existing.confirmed_by,
-          confirmed_by_name: isFullyPaid ? adminUser.name : existing.confirmed_by_name,
-          last_edited_by: validAdminId,
-          updated_at: nowStr,
-        })
-        .eq('id', id)
-        .select('*, creator_profile:profiles!created_by(*)')
-        .single();
-      if (updErr) throw updErr;
-
-      // History log
-      await supabase.from('entry_history').insert({
-        entry_id: id,
-        changed_by: validAdminId,
-        changed_by_name: adminUser.name,
-        change_type: isFullyPaid ? 'status_changed' : 'edited',
-        new_value: {
-          paidAmount,
-          remainingAmount: isFullyPaid ? 0 : newAmount,
-          isFullyPaid,
-          note,
-        },
-        changes: {
-          amount: { old: currentAmount, new: newAmount },
-          status: { old: existing.status, new: newStatus },
-        },
-      });
-
-      // Admin Action Log
-      await supabase.from('admin_action_log').insert({
-        admin_user_id: validAdminId,
-        admin_name: adminUser.name,
-        action_type: 'edit',
-        target_entry_id: id,
-        summary: isFullyPaid
-          ? `Qarz to‘liq to‘landi va yopildi: ${existing.party_name} (${currentAmount} so‘m to‘landi)`
-          : `Qarz qisman to‘landi: ${existing.party_name} (${paidAmount} so‘m to‘landi, qoldiq: ${newAmount} so‘m)`,
-        after_data: updated,
-      });
-
-      return {
-        updatedEntry: updated as Entry,
-        isFullyPaid,
-        remainingAmount: isFullyPaid ? 0 : newAmount,
-      };
-    }
-
-    // Local storage
+    // 1. Update local storage first
     const items = getStored<Entry[]>(STORAGE_ENTRIES, INITIAL_MOCK_ENTRIES);
     const existing = items.find((e) => e.id === id);
     if (!existing) throw new Error('Qarz yozuvi topilmadi.');
@@ -789,12 +723,81 @@ export const entriesService = {
       ...logs,
     ]);
 
+    // 2. Sync to Supabase if available
+    if (isSupabaseConfigured() && typeof navigator !== 'undefined' && navigator.onLine) {
+      try {
+        const { data: updated, error: updErr } = await supabase
+          .from('entries')
+          .update({
+            status: newStatus,
+            paid_at: isFullyPaid ? nowStr : existing.paid_at,
+            amount: newAmount,
+            confirmed_by: isFullyPaid ? validAdminId : existing.confirmed_by,
+            confirmed_by_name: isFullyPaid ? adminUser.name : existing.confirmed_by_name,
+            last_edited_by: validAdminId,
+            updated_at: nowStr,
+          })
+          .eq('id', id)
+          .select('*, creator_profile:profiles!created_by(*)')
+          .single();
+
+        if (updErr) throw updErr;
+
+        if (updated) {
+          // Log in Supabase entry_history & admin_action_log
+          await supabase.from('entry_history').insert({
+            entry_id: id,
+            changed_by: validAdminId,
+            changed_by_name: adminUser.name,
+            change_type: isFullyPaid ? 'status_changed' : 'edited',
+            new_value: { paidAmount, remainingAmount: isFullyPaid ? 0 : newAmount, isFullyPaid, note },
+            changes: { amount: { old: currentAmount, new: newAmount }, status: { old: existing.status, new: newStatus } },
+          });
+
+          await supabase.from('admin_action_log').insert({
+            admin_user_id: validAdminId,
+            admin_name: adminUser.name,
+            action_type: 'edit',
+            target_entry_id: id,
+            summary: isFullyPaid
+              ? `Qarz to‘liq to‘landi va yopildi: ${existing.party_name} (${currentAmount} so‘m to‘landi)`
+              : `Qarz qisman to‘landi: ${existing.party_name} (${paidAmount} so‘m to‘landi, qoldiq: ${newAmount} so‘m)`,
+            after_data: updated,
+          });
+
+          return {
+            updatedEntry: updated as Entry,
+            isFullyPaid,
+            remainingAmount: isFullyPaid ? 0 : newAmount,
+          };
+        }
+      } catch (err) {
+        console.warn('Supabase to‘lov yozishda xatolik, oflayn navbatga olindi:', err);
+        syncService.enqueue('pay_entry', {
+          id,
+          amount: newAmount,
+          status: newStatus,
+          paid_at: isFullyPaid ? nowStr : existing.paid_at,
+          confirmed_by_name: isFullyPaid ? adminUser.name : existing.confirmed_by_name,
+        });
+      }
+    } else if (isSupabaseConfigured()) {
+      syncService.enqueue('pay_entry', {
+        id,
+        amount: newAmount,
+        status: newStatus,
+        paid_at: isFullyPaid ? nowStr : existing.paid_at,
+        confirmed_by_name: isFullyPaid ? adminUser.name : existing.confirmed_by_name,
+      });
+    }
+
     return {
       updatedEntry,
       isFullyPaid,
       remainingAmount: isFullyPaid ? 0 : newAmount,
     };
   },
+
 
   // ── 8. DASHBOARD METRICS ───────────────────────────────────
   async getDashboardMetrics(): Promise<DashboardMetrics> {
