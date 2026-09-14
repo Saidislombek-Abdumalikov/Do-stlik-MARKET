@@ -136,6 +136,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAIDrawer }) => {
             )}
           </div>
 
+          {/* Quick Lock / Switch Cashier Button */}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="p-1.5 rounded-xl bg-white hover:bg-rose-50 border border-slate-300 hover:border-rose-300 text-slate-500 hover:text-rose-600 transition-all cursor-pointer shadow-xs"
+            title="Xodimni almashtirish / Tizimni qulflash (Chiqish)"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+
           {/* AI Yordamchi shortcut */}
           <button
             type="button"

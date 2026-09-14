@@ -115,8 +115,21 @@ export function normalizeWord(w: string): string {
   }
   clean = clean.trim();
   
-  // Aka / Oka shevalari
-  if (clean === 'oka' || clean === 'okam' || clean === 'akam' || clean === 'akaxon' || clean === 'okaxon' || clean === 'okasi' || clean === 'akasi' || clean === 'oko') return 'aka';
+  // Aka / Oka shevalari va ovoz xatolari (o'quv, oquv, okoga, akaga)
+  if (
+    clean === 'oka' ||
+    clean === 'okam' ||
+    clean === 'akam' ||
+    clean === 'akaxon' ||
+    clean === 'okaxon' ||
+    clean === 'okasi' ||
+    clean === 'akasi' ||
+    clean === 'oko' ||
+    clean === "o'quv" ||
+    clean === 'oquv' ||
+    clean === "o'qu" ||
+    clean === 'okov'
+  ) return 'aka';
   // Opa shevalari
   if (clean === 'opam' || clean === 'opaxon' || clean === 'opasi') return 'opa';
   // Tog'a / Amaki
@@ -126,8 +139,8 @@ export function normalizeWord(w: string): string {
   if (clean === 'ammam') return 'amma';
   if (clean === 'ustam') return 'usta';
 
-  // Farhod shevalari (Farxod, Farxot, Farhot)
-  if (clean === 'farxod' || clean === 'farxot' || clean === 'farhot') return 'farhod';
+  // Farhod shevalari (Farxod, Farxot, Farhot, Farxat, Farhat)
+  if (clean === 'farxod' || clean === 'farxot' || clean === 'farhot' || clean === 'farxat' || clean === 'farhat') return 'farhod';
 
   // Qassob shevalari
   if (clean === 'qossob' || clean === 'qossop' || clean === 'kassob' || clean === 'qasob') return 'qassob';
@@ -244,6 +257,8 @@ function cleanUzbekText(text: string): string {
     .replace(/[ʻʼ`´]/g, "'")
     .replace(/[–—]/g, '-')
     .replace(/[,;:]/g, ' ')
+    // Normalize dots between thousands (e.g. 30.000 -> 30000, 1.500.000 -> 1500000)
+    .replace(/(\d+)\.(\d{3})(?!\d)/g, '$1$2')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -274,8 +289,9 @@ export function extractUzbekNumber(word: string): number | null {
  */
 export function resolveCompoundNumbers(rawText: string): { amount: number; currency: 'UZS' | 'USD' } {
   let text = cleanUzbekText(rawText);
-  // Normalize space separated thousands: e.g. "50 000" -> "50000"
-  text = text.replace(/(\b\d{1,3})\s+(\d{3})\b/g, '$1$2');
+  // Normalize multi-group dotted and space separated thousands: e.g. "1 500 000" -> "1500000", "50 000" -> "50000"
+  text = text.replace(/(\b\d{1,3})[.\s]+(\d{3})[.\s]+(\d{3})\b/g, '$1$2$3');
+  text = text.replace(/(\b\d{1,3})[.\s]+(\d{3})\b/g, '$1$2');
 
   // 1. Currency Check (USD)
   const usdMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:\$|dollar|usd)/i);

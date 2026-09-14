@@ -93,6 +93,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
   // Customer autocomplete & suggestions state
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [selectedCustomerMeta, setSelectedCustomerMeta] = useState<CustomerSummary | null>(null);
+  const [isCustomerDetached, setIsCustomerDetached] = useState(false);
   const amountInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -110,6 +111,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
       if (prefillCustomer.phone) {
         setEditPhone(prefillCustomer.phone);
       }
+      setIsCustomerDetached(false);
       setActiveMode('nasiya');
       const match = customerSummaries.find(
         (c) => c.customer_name.trim().toLowerCase() === prefillCustomer.name.trim().toLowerCase()
@@ -123,16 +125,21 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
     }
   }, [prefillCustomer, customerSummaries]);
 
-  // Sync selectedCustomerMeta when editCustomerName changes
+  // Sync selectedCustomerMeta when editCustomerName changes (unless manually detached)
   useEffect(() => {
     const trimmed = editCustomerName.trim();
     if (!trimmed) {
+      setSelectedCustomerMeta(null);
+      setIsCustomerDetached(false);
+      return;
+    }
+    if (isCustomerDetached) {
       setSelectedCustomerMeta(null);
       return;
     }
     const match = findMatchingExistingCustomer(trimmed);
     setSelectedCustomerMeta(match);
-  }, [editCustomerName, customerSummaries]);
+  }, [editCustomerName, customerSummaries, isCustomerDetached]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -215,6 +222,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
     if (cust.customer_phone) {
       setEditPhone(cust.customer_phone);
     }
+    setIsCustomerDetached(false);
     setSelectedCustomerMeta(cust);
     setShowCustomerDropdown(false);
     setTimeout(() => {
@@ -251,13 +259,10 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
   const allEntries: Entry[] = entriesData?.data || [];
 
-  // Parse text using Gemini AI with fallback to Turbo Engine (Multi-stage reasoning)
+  // Multi-stage AI parser
   const runAiParse = async (rawText: string) => {
     const text = rawText.trim();
-    if (!text) {
-      setAiStage('idle');
-      return;
-    }
+    if (!text) return;
 
     // Stage 1: Analyzing
     setAiStage('analyzing');
@@ -275,8 +280,9 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
     } | null = null;
 
     try {
-      // 1. Try Google Gemini AI first
-      const geminiData = await parseNasiyaWithGemini(text);
+      // 1. Try Google Gemini AI first with known customer names context
+      const knownNames = customerSummaries.map((c) => c.customer_name);
+      const geminiData = await parseNasiyaWithGemini(text, knownNames);
       if (geminiData && (geminiData.customer_name || geminiData.amount > 0)) {
         parsedResult = geminiData;
       }
@@ -309,17 +315,30 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
     await new Promise((r) => setTimeout(r, 500));
 
     if (parsedResult) {
-      if (parsedResult.customer_name && parsedResult.customer_name !== 'Mijoz') {
-        const matched = findMatchingExistingCustomer(parsedResult.customer_name);
+      const parsedName = (parsedResult.customer_name || '').trim();
+      if (
+        parsedName &&
+        parsedName.toLowerCase() !== 'mijoz' &&
+        !parsedName.toLowerCase().includes('noma')
+      ) {
+        const matched = findMatchingExistingCustomer(parsedName);
         if (matched) {
           setEditCustomerName(matched.customer_name);
           if (matched.customer_phone && !editPhone) {
             setEditPhone(matched.customer_phone);
           }
+          setIsCustomerDetached(false);
           setSelectedCustomerMeta(matched);
         } else {
-          setEditCustomerName(parsedResult.customer_name);
+          setEditCustomerName(parsedName);
+          setIsCustomerDetached(true);
+          setSelectedCustomerMeta(null);
         }
+      } else {
+        // No customer specified or anonymous
+        setEditCustomerName('');
+        setIsCustomerDetached(false);
+        setSelectedCustomerMeta(null);
       }
       if (parsedResult.amount && parsedResult.amount > 0) {
         setEditAmount(String(parsedResult.amount));
@@ -524,6 +543,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
       } catch {}
     }
     setIsListening(false);
+    setIsCustomerDetached(false);
     if (externalOnClose) externalOnClose();
     if (!isControlled) setInternalIsOpen(false);
   };
@@ -531,14 +551,11 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
   // Direct Save for Nasiya mode: saves exact moment, optional phone, due date
   const handleDirectSave = async () => {
     const numAmount = Number(editAmount.replace(/\D/g, ''));
-    // If an existing customer was matched, use their canonical customer_name so all entries aggregate to that person!
-    const customer = (selectedCustomerMeta ? selectedCustomerMeta.customer_name : editCustomerName).trim();
-    const phoneToSave = editPhone.trim() || (selectedCustomerMeta?.customer_phone || null);
+    // If an existing customer was matched and not detached, use their canonical customer_name
+    const rawCustomer = editCustomerName.trim();
+    const customer = (selectedCustomerMeta && !isCustomerDetached ? selectedCustomerMeta.customer_name : rawCustomer) || 'Noma‘lum mijoz';
+    const phoneToSave = editPhone.trim() || (selectedCustomerMeta && !isCustomerDetached ? selectedCustomerMeta.customer_phone : null);
 
-    if (!customer) {
-      showToast('Iltimos, mijoz ismini kiriting.', 'error');
-      return;
-    }
     if (!numAmount || numAmount <= 0) {
       showToast('Iltimos, to‘g‘ri summa kiriting.', 'error');
       return;
@@ -597,6 +614,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
       setInputText('');
       setEditCustomerName('');
       setSelectedCustomerMeta(null);
+      setIsCustomerDetached(false);
       setShowCustomerDropdown(false);
       setEditAmount('');
       setEditItems('');
@@ -938,7 +956,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                   </div>
 
                   {/* PROMINENT EYE-LEVEL CONFIRMATION CARD (Direct Top Save Action) */}
-                  {editCustomerName.trim() && Number(editAmount) > 0 && (
+                  {Number(editAmount) > 0 && (
                     <div className="p-3.5 bg-gradient-to-r from-emerald-500/15 via-emerald-500/10 to-teal-500/15 border-2 border-emerald-500/70 rounded-2xl shadow-md space-y-2.5 shrink-0 animate-in fade-in zoom-in-95 duration-200">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
@@ -954,7 +972,11 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                         <div>
                           <span className="text-[10px] text-slate-500 font-bold block">Mijoz:</span>
                           <span className="font-black text-slate-900 truncate block text-xs sm:text-sm">
-                            {editCustomerName}
+                            {editCustomerName.trim()
+                              ? (selectedCustomerMeta && !isCustomerDetached
+                                  ? `${selectedCustomerMeta.customer_name} (Mavjud)`
+                                  : `${editCustomerName.trim()} (Alohida yangi)`)
+                              : "Noma‘lum mijoz (Umumiy)"}
                           </span>
                         </div>
                         <div>
@@ -997,21 +1019,25 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
                   {/* Spacious Form Fields Box */}
                   <div className="p-3.5 bg-slate-100 border border-slate-300 rounded-2xl space-y-2.5 shadow-2xs shrink-0">
-                    {/* Row 1: Name (with smart autocomplete) and Amount */}
+                    {/* Row 1: Name (with smart autocomplete & detached options) and Amount */}
                     <div className="grid grid-cols-2 gap-3">
                       {/* Customer Name input with rich autocomplete dropdown */}
                       <div className="relative" ref={dropdownRef}>
                         <div className="flex items-center justify-between">
                           <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
                             <User className="w-3.5 h-3.5 text-slate-500" />
-                            <span>Mijoz ismi *</span>
+                            <span>Mijoz ismi (ixtiyoriy)</span>
                           </label>
-                          {selectedCustomerMeta && (
+                          {selectedCustomerMeta && !isCustomerDetached ? (
                             <span className="text-[10px] text-emerald-700 font-black flex items-center gap-0.5">
                               <Check className="w-3 h-3" />
                               <span>Mavjud</span>
                             </span>
-                          )}
+                          ) : isCustomerDetached && editCustomerName.trim() ? (
+                            <span className="text-[10px] text-amber-700 font-black flex items-center gap-0.5">
+                              <span>Yangi</span>
+                            </span>
+                          ) : null}
                         </div>
 
                         <div className="relative">
@@ -1023,7 +1049,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                               setEditCustomerName(e.target.value);
                               setShowCustomerDropdown(true);
                             }}
-                            placeholder="Ism yoki laqab (masalan: Qassob, Qo'shni)..."
+                            placeholder="Ism yoki bo‘sh (Noma‘lum mijoz)..."
                             className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-violet-700 text-xs font-bold transition-colors shadow-2xs pr-7"
                           />
                           {editCustomerName && (
@@ -1032,6 +1058,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                               onClick={() => {
                                 setEditCustomerName('');
                                 setSelectedCustomerMeta(null);
+                                setIsCustomerDetached(false);
                                 setShowCustomerDropdown(true);
                               }}
                               className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
@@ -1043,12 +1070,12 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                         </div>
 
                         {/* Customer Autocomplete Dropdown */}
-                        {showCustomerDropdown && customerSuggestions.length > 0 && (
-                          <div className="absolute left-0 w-[240px] sm:w-[280px] top-full mt-1.5 bg-white border-2 border-violet-600 rounded-2xl shadow-2xl z-50 overflow-hidden divide-y divide-slate-100 max-h-56 overflow-y-auto">
+                        {showCustomerDropdown && (
+                          <div className="absolute left-0 w-[260px] sm:w-[300px] top-full mt-1.5 bg-white border-2 border-violet-600 rounded-2xl shadow-2xl z-50 overflow-hidden divide-y divide-slate-100 max-h-64 overflow-y-auto">
                             <div className="p-2 bg-violet-50/95 border-b border-violet-100 flex items-center justify-between text-[10.5px] font-bold text-violet-900">
                               <span className="flex items-center gap-1">
                                 <Users className="w-3 h-3 text-violet-700" />
-                                <span>Tavsiya etilgan mijozlar:</span>
+                                <span>Mijozni tanlash:</span>
                               </span>
                               <button
                                 type="button"
@@ -1059,8 +1086,59 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                               </button>
                             </div>
 
+                            {/* Option 1: Detached / Brand new independent customer */}
+                            {editCustomerName.trim() && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsCustomerDetached(true);
+                                  setSelectedCustomerMeta(null);
+                                  setShowCustomerDropdown(false);
+                                }}
+                                className="w-full p-2 text-left bg-amber-50/80 hover:bg-amber-100 transition-colors cursor-pointer flex items-center gap-2 border-b border-amber-200/60"
+                              >
+                                <span className="w-5 h-5 rounded-md bg-amber-200 text-amber-900 flex items-center justify-center font-bold text-xs shrink-0">
+                                  ➕
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-bold text-amber-950 text-xs truncate">
+                                    &ldquo;{editCustomerName.trim()}&rdquo; — alohida yangi mijoz
+                                  </div>
+                                  <span className="text-[9.5px] text-amber-800 block">
+                                    Mavjud hisobga qo‘shilmasin
+                                  </span>
+                                </div>
+                              </button>
+                            )}
+
+                            {/* Option 2: No customer / Anonymous walk-in */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditCustomerName('');
+                                setSelectedCustomerMeta(null);
+                                setIsCustomerDetached(false);
+                                setShowCustomerDropdown(false);
+                              }}
+                              className="w-full p-2 text-left bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer flex items-center gap-2"
+                            >
+                              <span className="w-5 h-5 rounded-md bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs shrink-0">
+                                👤
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-bold text-slate-800 text-xs">
+                                  Mijozsiz (Noma‘lum mijoz)
+                                </div>
+                                <span className="text-[9.5px] text-slate-500 block">
+                                  Ism kiritmasdan umumiy qarz deb yozish
+                                </span>
+                              </div>
+                            </button>
+
+                            {/* Suggested existing customers from DB */}
                             {customerSuggestions.map((cust) => {
                               const isSelected =
+                                !isCustomerDetached &&
                                 cust.customer_name.toLowerCase() === editCustomerName.trim().toLowerCase();
 
                               return (
@@ -1123,8 +1201,8 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                       </div>
                     </div>
 
-                    {/* Notification Banner when customer is selected */}
-                    {selectedCustomerMeta && (
+                    {/* Notification Banner when existing customer is selected */}
+                    {selectedCustomerMeta && !isCustomerDetached && (
                       <div className="p-2.5 bg-violet-100/95 border border-violet-300 rounded-xl flex items-center justify-between text-xs text-violet-950 shadow-2xs">
                         <div className="flex items-center gap-2 min-w-0">
                           <Users className="w-4 h-4 text-violet-700 shrink-0" />
@@ -1137,9 +1215,45 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                             </span>
                           </div>
                         </div>
-                        <span className="text-[10px] bg-violet-700 text-white font-black px-2 py-0.5 rounded-md shrink-0 shadow-2xs">
-                          Bunga qo‘shiladi
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCustomerDetached(true);
+                              setSelectedCustomerMeta(null);
+                            }}
+                            className="text-[10px] bg-white hover:bg-slate-100 text-slate-700 font-bold px-2 py-1 rounded-lg border border-slate-300 cursor-pointer transition-colors shadow-2xs"
+                            title="Mavjud mijoz hisobiga qo‘shmasdan yangi mijoz deb yozish"
+                          >
+                            ✕ Bog‘lamaslik
+                          </button>
+                          <span className="text-[10px] bg-violet-700 text-white font-black px-2 py-0.5 rounded-md shrink-0 shadow-2xs">
+                            Bunga qo‘shiladi
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Notification Banner when customer name was typed but detached */}
+                    {isCustomerDetached && editCustomerName.trim() && (
+                      <div className="p-2 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-900 shadow-2xs">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span className="truncate font-semibold">
+                            Alohida yangi mijoz deb yoziladi (mavjud qarzga qo‘shilmaydi)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCustomerDetached(false);
+                            const match = findMatchingExistingCustomer(editCustomerName.trim());
+                            setSelectedCustomerMeta(match);
+                          }}
+                          className="text-[10px] text-violet-700 hover:text-violet-900 font-bold underline shrink-0 cursor-pointer"
+                        >
+                          Qayta bog‘lash
+                        </button>
                       </div>
                     )}
 
@@ -1232,10 +1346,10 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                   {/* Prominent Direct Save & Confirm Button */}
                   <button
                     type="button"
-                    disabled={isSaving || !editCustomerName.trim() || !editAmount || Number(editAmount) <= 0}
+                    disabled={isSaving || !editAmount || Number(editAmount) <= 0}
                     onClick={handleDirectSave}
                     className={`w-full py-3.5 px-4 text-white rounded-2xl font-black text-sm shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] shrink-0 ${
-                      editCustomerName.trim() && Number(editAmount) > 0
+                      Number(editAmount) > 0
                         ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-emerald-800/30 border border-emerald-500'
                         : 'bg-violet-700 hover:bg-violet-800 active:bg-violet-900 disabled:opacity-40 shadow-violet-900/30 border border-violet-800/50'
                     }`}
