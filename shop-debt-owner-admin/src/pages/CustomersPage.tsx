@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { entriesService } from '../api/entriesService';
 import { CustomerSortOption, CustomerSummary, Entry } from '../types/database';
@@ -34,10 +34,37 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   const [selectedCustomerForLedger, setSelectedCustomerForLedger] = useState<CustomerSummary | null>(null);
   const [payingEntry, setPayingEntry] = useState<Entry | null>(null);
 
-  const { data: customers = [], isLoading } = useQuery({
-    queryKey: ['customers', sortBy, search],
-    queryFn: () => entriesService.getCustomerSummaries(sortBy, search),
+  const { data: allCustomers = [], isLoading } = useQuery({
+    queryKey: ['customerSummaries'],
+    queryFn: () => entriesService.getCustomerSummaries('highest'),
+    placeholderData: (prev) => prev,
+    staleTime: 1000 * 60 * 5,
   });
+
+  const customers = useMemo(() => {
+    let list = [...allCustomers];
+
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (c) =>
+          c.customer_name.toLowerCase().includes(q) ||
+          (c.customer_phone && c.customer_phone.includes(q))
+      );
+    }
+
+    if (sortBy === 'highest') {
+      list.sort((a, b) => b.total_debt - a.total_debt);
+    } else if (sortBy === 'lowest') {
+      list.sort((a, b) => a.total_debt - b.total_debt);
+    } else if (sortBy === 'recent') {
+      list.sort(
+        (a, b) => new Date(b.latest_entry_date).getTime() - new Date(a.latest_entry_date).getTime()
+      );
+    }
+
+    return list;
+  }, [allCustomers, search, sortBy]);
 
   const overdueCount = customers.filter((c) => c.is_overdue && c.total_debt > 0).length;
 

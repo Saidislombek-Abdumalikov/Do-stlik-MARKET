@@ -14,6 +14,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onOpen
   const { data: metrics, isLoading } = useQuery({
     queryKey: ['dashboardMetrics'],
     queryFn: () => entriesService.getDashboardMetrics(),
+    placeholderData: (prev) => prev,
+    staleTime: 1000 * 60 * 5,
   });
 
   return (

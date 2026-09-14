@@ -28,27 +28,38 @@ const isUUID = (str?: string): boolean => {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
 };
 
+// Fast in-memory cache to avoid continuous JSON.parse overhead on low-end devices
+const memoryCache = new Map<string, any>();
+
 const getStored = <T>(key: string, initial: T): T => {
   if (typeof window === 'undefined') return initial;
+  if (memoryCache.has(key)) {
+    return memoryCache.get(key) as T;
+  }
   const item = localStorage.getItem(key);
   if (!item) {
     localStorage.setItem(key, JSON.stringify(initial));
+    memoryCache.set(key, initial);
     return initial;
   }
   try {
     const parsed = JSON.parse(item);
     if (Array.isArray(initial) && !Array.isArray(parsed)) {
       localStorage.setItem(key, JSON.stringify(initial));
+      memoryCache.set(key, initial);
       return initial;
     }
+    memoryCache.set(key, parsed);
     return parsed;
   } catch {
     localStorage.setItem(key, JSON.stringify(initial));
+    memoryCache.set(key, initial);
     return initial;
   }
 };
 
 const setStored = <T>(key: string, data: T) => {
+  memoryCache.set(key, data);
   if (typeof window !== 'undefined') {
     localStorage.setItem(key, JSON.stringify(data));
   }
@@ -891,13 +902,14 @@ export const entriesService = {
 
     if (isSupabaseConfigured()) {
       try {
-        const { data: entriesData, error: eErr } = await supabase.from('entries').select('*');
-        if (eErr) throw eErr;
-        items = (entriesData as Entry[]) || [];
-
-        const { data: profData, error: pErr } = await supabase.from('profiles').select('*');
-        if (pErr) throw pErr;
-        profiles = (profData as Profile[]) || [];
+        const [entriesRes, profRes] = await Promise.all([
+          supabase.from('entries').select('*'),
+          supabase.from('profiles').select('*'),
+        ]);
+        if (entriesRes.error) throw entriesRes.error;
+        if (profRes.error) throw profRes.error;
+        items = (entriesRes.data as Entry[]) || [];
+        profiles = (profRes.data as Profile[]) || [];
       } catch (err) {
         console.warn('Supabase getDashboardMetrics failed, fallback to local storage:', err);
         items = getStored<Entry[]>(STORAGE_ENTRIES, INITIAL_MOCK_ENTRIES);
@@ -1048,7 +1060,7 @@ export const entriesService = {
       try {
         const { data, error } = await supabase
           .from('entries')
-          .select('*, creator_profile:profiles!created_by(*)')
+          .select('*')
           .eq('direction', 'customer');
         if (error) throw error;
         

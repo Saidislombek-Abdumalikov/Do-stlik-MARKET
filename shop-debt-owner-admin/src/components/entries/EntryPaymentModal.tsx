@@ -73,6 +73,7 @@ export const EntryPaymentModal: React.FC<EntryPaymentModalProps> = ({
 
       await queryClient.invalidateQueries({ queryKey: ['entries'] });
       await queryClient.invalidateQueries({ queryKey: ['customers'] });
+      await queryClient.invalidateQueries({ queryKey: ['customerSummaries'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
       await queryClient.invalidateQueries({ queryKey: ['adminLogs'] });
 

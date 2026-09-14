@@ -41,6 +41,8 @@ export const EntriesPage: React.FC<EntriesPageProps> = ({ onNewEntryClick, initi
   const { data: entriesRes, isLoading } = useQuery({
     queryKey: ['entries', filters, page],
     queryFn: () => entriesService.getEntries(filters, page, pageSize),
+    placeholderData: (prev) => prev,
+    staleTime: 1000 * 60 * 5,
   });
 
   const editMutation = useMutation({
@@ -52,6 +54,7 @@ export const EntriesPage: React.FC<EntriesPageProps> = ({ onNewEntryClick, initi
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ['entries'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+      queryClient.invalidateQueries({ queryKey: ['customerSummaries'] });
       queryClient.invalidateQueries({ queryKey: ['adminLogs'] });
       showToast(`Qarz (${updated.party_name}) tahrirlandi!`, 'success');
       setEditingEntry(null);

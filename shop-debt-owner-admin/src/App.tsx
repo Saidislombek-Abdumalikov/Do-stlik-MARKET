@@ -12,12 +12,16 @@ import { useRealtime } from './hooks/useRealtime';
 import { LoginPage } from './pages/LoginPage';
 import { FloatingAIButton } from './components/common/FloatingAIButton';
 import { syncService } from './api/syncService';
+import { entriesService } from './api/entriesService';
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      staleTime: 1000 * 30,
+      refetchOnMount: false,
+      refetchOnReconnect: true,
+      staleTime: 1000 * 60 * 5, // 5 daqiqa kesh amal qilish muddati
+      gcTime: 1000 * 60 * 30, // 30 daqiqa xotirada saqlash
     },
   },
 });
@@ -31,6 +35,24 @@ const AppContent: React.FC = () => {
 
   // Enable live Supabase realtime sync
   useRealtime();
+
+  // Eagerly prefetch all 3 primary views in the background so tabs open with 0ms latency
+  React.useEffect(() => {
+    if (user) {
+      queryClient.prefetchQuery({
+        queryKey: ['dashboardMetrics'],
+        queryFn: () => entriesService.getDashboardMetrics(),
+      });
+      queryClient.prefetchQuery({
+        queryKey: ['customerSummaries'],
+        queryFn: () => entriesService.getCustomerSummaries('highest'),
+      });
+      queryClient.prefetchQuery({
+        queryKey: ['entries', { search: '', status: 'open', direction: 'all' }, 1],
+        queryFn: () => entriesService.getEntries({ search: '', status: 'open', direction: 'all' }, 1, 10),
+      });
+    }
+  }, [user]);
 
   // Enable offline-to-online auto sync
   React.useEffect(() => {
@@ -64,7 +86,7 @@ const AppContent: React.FC = () => {
       }}
       onOpenAIDrawer={() => setIsAIDrawerOpen(true)}
     >
-      {activeTab === 'dashboard' && (
+      <div className={activeTab === 'dashboard' ? 'block' : 'hidden'}>
         <DashboardPage
           onNavigate={(tab: any) => {
             setCustomerFilter('');
@@ -75,9 +97,9 @@ const AppContent: React.FC = () => {
             setIsAIDrawerOpen(true);
           }}
         />
-      )}
+      </div>
 
-      {activeTab === 'customers' && (
+      <div className={activeTab === 'customers' ? 'block' : 'hidden'}>
         <CustomersPage
           onViewCustomerEntries={(customerName) => {
             setCustomerFilter(customerName);
@@ -88,9 +110,9 @@ const AppContent: React.FC = () => {
             setIsAIDrawerOpen(true);
           }}
         />
-      )}
+      </div>
 
-      {activeTab === 'entries' && (
+      <div className={activeTab === 'entries' ? 'block' : 'hidden'}>
         <EntriesPage
           initialSearch={customerFilter}
           onNewEntryClick={() => {
@@ -98,7 +120,7 @@ const AppContent: React.FC = () => {
             setIsAIDrawerOpen(true);
           }}
         />
-      )}
+      </div>
 
       {/* Floating Moliya AI Action Button & Enhanced Bottom Sheet Drawer */}
       <FloatingAIButton

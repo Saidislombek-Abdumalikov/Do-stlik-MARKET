@@ -20,9 +20,11 @@ export function useRealtime() {
         { event: '*', schema: 'public', table: 'entries' },
         () => {
           setLastEventTime(new Date().toLocaleTimeString('uz-UZ'));
-          // Invalidate entries and dashboard queries
+          // Invalidate entries, dashboard metrics, and customer summaries
           queryClient.invalidateQueries({ queryKey: ['entries'] });
           queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+          queryClient.invalidateQueries({ queryKey: ['customerSummaries'] });
+          queryClient.invalidateQueries({ queryKey: ['customers'] });
         }
       )
       .on(
