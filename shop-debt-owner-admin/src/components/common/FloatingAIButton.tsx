@@ -35,6 +35,7 @@ interface FloatingAIButtonProps {
   isOpen?: boolean;
   onOpen?: () => void;
   onClose?: () => void;
+  onSaveSuccess?: () => void;
   onNavigate?: (tab: NavTab, prefillTurboText?: string) => void;
   showFloatingTrigger?: boolean;
   prefillCustomer?: { name: string; phone?: string | null } | null;
@@ -44,6 +45,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
   isOpen: externalIsOpen,
   onOpen: externalOnOpen,
   onClose: externalOnClose,
+  onSaveSuccess,
   onNavigate: _onNavigate,
   showFloatingTrigger = false,
   prefillCustomer = null,
@@ -57,6 +59,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
   // Mode 1: Nasiya recording state
   const [inputText, setInputText] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [liveSpeechText, setLiveSpeechText] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isAiThinking, setIsAiThinking] = useState(false);
   // Multi-stage AI reasoning state: 'idle' | 'listening' | 'analyzing' | 'grouping' | 'review'
@@ -66,6 +69,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
   // Inline keyboard editable fields for Nasiya
   const [editCustomerName, setEditCustomerName] = useState('');
   const [editAmount, setEditAmount] = useState('');
+
   const [editItems, setEditItems] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editDueCondition, setEditDueCondition] = useState('Bugun');
@@ -448,8 +452,9 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
         const trimmed = fullTranscript.trim();
         if (target === 'nasiya') {
-          // Keep in hidden buffer so words do not blink/distract user during speech
+          // Keep in buffer and show live reassurance preview
           spokenBufferRef.current = trimmed;
+          setLiveSpeechText(trimmed);
         } else {
           setSearchQuery(trimmed);
         }
@@ -467,6 +472,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
       recognition.onerror = (event: any) => {
         console.warn('Speech recognition status/error:', event.error);
+        setLiveSpeechText('');
         if (event.error === 'not-allowed') {
           showToast('Mikrofon ruxsati berilmadi. Sozlamalardan mikrofonni yoqing.', 'error');
           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
@@ -480,6 +486,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         isListeningRef.current = false;
         setIsListening(false);
+        setLiveSpeechText('');
         // When speech finishes, reveal transcription and trigger multi-stage AI reasoning calmly
         if (target === 'nasiya') {
           const finalSpoken = spokenBufferRef.current.trim();
@@ -491,6 +498,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
           }
         }
       };
+
 
       recognitionRef.current = recognition;
       recognition.start();
@@ -550,7 +558,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
       const finalDueDate = dueDate || getTashkentDateString(new Date());
 
-      await entriesService.createManualEntry(
+      const created = await entriesService.createManualEntry(
         {
           party_name: customer,
           party_phone: phoneToSave,
@@ -567,11 +575,23 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
         { id: adminId, name: adminName }
       );
 
+      // Instant optimistic insertion into entries query cache
+      queryClient.setQueriesData({ queryKey: ['entries'] }, (old: any) => {
+        if (!old || !old.data) return { data: [created], total: 1 };
+        return {
+          ...old,
+          data: [created, ...old.data.filter((e: Entry) => e.id !== created.id)],
+          total: (old.total || 0) + 1,
+        };
+      });
+
       await queryClient.invalidateQueries({ queryKey: ['entries'] });
       await queryClient.invalidateQueries({ queryKey: ['customers'] });
       await queryClient.invalidateQueries({ queryKey: ['customerSummaries'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
       await queryClient.invalidateQueries({ queryKey: ['adminLogs'] });
+
+      if (onSaveSuccess) onSaveSuccess();
 
       showToast(`✅ ${customer} daftariga ${formatMoney(numAmount)} muvaffaqiyatli yozildi!`, 'success');
       setInputText('');
@@ -585,6 +605,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
       setDueType('today');
       setDueDate(getTodayStr());
       handleClose();
+
     } catch (err: any) {
       showToast(err.message || 'Saqlashda xatolik yuz berdi.', 'error');
     } finally {
@@ -805,19 +826,25 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                   <div className="relative bg-slate-100 border border-slate-300 rounded-2xl p-3 sm:p-3.5 focus-within:border-violet-600 focus-within:bg-white transition-all shadow-2xs shrink-0">
                     {isListening ? (
                       /* Calm voice recording screen - spacious, comfortable and unhurried */
-                      <div className="min-h-[84px] p-3 flex items-center justify-between bg-violet-50/90 border border-violet-200 rounded-xl">
-                        <div className="flex items-center gap-3">
-                          <div className="relative flex items-center justify-center w-6 h-6">
+                      <div className="min-h-[84px] p-3 flex items-center justify-between bg-violet-50/90 border border-violet-200 rounded-xl gap-2">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="relative flex items-center justify-center w-6 h-6 shrink-0">
                             <span className="w-4 h-4 rounded-full bg-rose-600 animate-ping absolute" />
                             <span className="w-3.5 h-3.5 rounded-full bg-rose-600 relative" />
                           </div>
-                          <div>
+                          <div className="min-w-0 flex-1">
                             <p className="text-sm font-black text-slate-900 leading-tight">
                               Eshitilmoqda... Bemalol gapiring
                             </p>
-                            <p className="text-xs text-slate-500 font-medium mt-0.5">
-                              Gapirib bo‘lgach, AI to‘liq tahlil qilib beradi
-                            </p>
+                            {liveSpeechText ? (
+                              <p className="text-xs text-violet-800 font-bold mt-1 bg-violet-100/90 px-2.5 py-1 rounded-lg truncate border border-violet-200">
+                                🗣️ &ldquo;{liveSpeechText}&rdquo;
+                              </p>
+                            ) : (
+                              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                                Gapirib bo‘lgach, AI to‘liq tahlil qilib beradi
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -886,7 +913,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                     {aiStage === 'listening' ? (
                       <div className="flex items-center gap-2 text-violet-900 text-xs font-bold w-full bg-violet-100/90 border border-violet-300 px-3 py-1 rounded-xl">
                         <Mic className="w-3.5 h-3.5 text-violet-700 animate-pulse shrink-0" />
-                        <span className="truncate">Ovoz yozilmoqda... Tugatgach "Tayyor"ni bosing</span>
+                        <span className="truncate">Ovoz tinglanmoqda... (Gapirib bo‘lgach &ldquo;Tayyor&rdquo;ni bosing)</span>
                       </div>
                     ) : aiStage === 'analyzing' ? (
                       <div className="flex items-center gap-2 px-3 py-1 bg-amber-100 border border-amber-300 rounded-xl text-amber-900 text-xs font-black w-full animate-pulse">
@@ -896,19 +923,77 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                     ) : aiStage === 'grouping' ? (
                       <div className="flex items-center gap-2 px-3 py-1 bg-sky-100 border border-sky-300 rounded-xl text-sky-900 text-xs font-black w-full animate-pulse">
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-700 shrink-0" />
-                        <span className="truncate">2-bosqich: Mijoz, summa va muddat guruhlanmoqda...</span>
+                        <span className="truncate">2-bosqich: Mijoz, summa va muddat ajratilmoqda...</span>
                       </div>
                     ) : aiStage === 'review' ? (
                       <div className="flex items-center gap-2 px-3 py-1 bg-emerald-100 border border-emerald-300 rounded-xl text-emerald-900 text-xs font-black w-full">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                        <span className="truncate">3-bosqich: AI tushundi! Maʼlumotlarni tekshiring va tasdiqlang:</span>
+                        <span className="truncate">Tayyor! Pastdagi &ldquo;HA, DAFTARGA YOZISH&rdquo; tugmasini bosing:</span>
                       </div>
                     ) : (
                       <span className="text-[11px] text-slate-500 font-medium">
-                        💡 Masalan: "Farhod oka 30 000" yoki mikrofonni bosing
+                        💡 Masalan: &ldquo;Farhod oka 30 000&rdquo; yoki mikrofonni bosing
                       </span>
                     )}
                   </div>
+
+                  {/* PROMINENT EYE-LEVEL CONFIRMATION CARD (Direct Top Save Action) */}
+                  {editCustomerName.trim() && Number(editAmount) > 0 && (
+                    <div className="p-3.5 bg-gradient-to-r from-emerald-500/15 via-emerald-500/10 to-teal-500/15 border-2 border-emerald-500/70 rounded-2xl shadow-md space-y-2.5 shrink-0 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Daftarga yozishga tayyor!</span>
+                        </span>
+                        <span className="text-base font-black text-emerald-700">
+                          {formatMoney(Number(editAmount))}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs bg-white/95 p-2.5 rounded-xl border border-emerald-200 shadow-2xs">
+                        <div>
+                          <span className="text-[10px] text-slate-500 font-bold block">Mijoz:</span>
+                          <span className="font-black text-slate-900 truncate block text-xs sm:text-sm">
+                            {editCustomerName}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 font-bold block">Muddat:</span>
+                          <span className="font-bold text-slate-800 block text-xs">
+                            {dueType === 'tomorrow' ? 'Ertaga' : dueType === 'today' ? 'Bugun' : dueType === '3days' ? '3 kunda' : dueType === '1week' ? '1 haftada' : dueDate}
+                          </span>
+                        </div>
+                        {editItems && (
+                          <div className="col-span-2 border-t border-slate-100 pt-1 mt-0.5">
+                            <span className="text-[10px] text-slate-500 font-bold block">Mahsulotlar:</span>
+                            <span className="font-medium text-slate-800 text-xs truncate block">
+                              {editItems}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Large prominent top save button */}
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={handleDirectSave}
+                        className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-sm rounded-xl shadow-md shadow-emerald-700/30 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+                      >
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Daftarga yozilmoqda...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>✅ HA, DAFTARGA YOZISH ({formatMoney(Number(editAmount))})</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
 
                   {/* Spacious Form Fields Box */}
                   <div className="p-3.5 bg-slate-100 border border-slate-300 rounded-2xl space-y-2.5 shadow-2xs shrink-0">

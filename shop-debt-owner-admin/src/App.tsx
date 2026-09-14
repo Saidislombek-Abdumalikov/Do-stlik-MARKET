@@ -58,12 +58,18 @@ const AppContent: React.FC = () => {
   return (
     <Layout
       activeTab={activeTab}
-      onTabChange={setActiveTab}
+      onTabChange={(tab) => {
+        setCustomerFilter('');
+        setActiveTab(tab);
+      }}
       onOpenAIDrawer={() => setIsAIDrawerOpen(true)}
     >
       {activeTab === 'dashboard' && (
         <DashboardPage
-          onNavigate={(tab: any) => setActiveTab(tab)}
+          onNavigate={(tab: any) => {
+            setCustomerFilter('');
+            setActiveTab(tab);
+          }}
           onOpenNewDebt={() => {
             setPrefillCustomer(null);
             setIsAIDrawerOpen(true);
@@ -102,8 +108,14 @@ const AppContent: React.FC = () => {
           setIsAIDrawerOpen(false);
           setPrefillCustomer(null);
         }}
+        onSaveSuccess={() => {
+          setCustomerFilter('');
+        }}
         prefillCustomer={prefillCustomer}
-        onNavigate={(tab) => setActiveTab(tab)}
+        onNavigate={(tab) => {
+          setCustomerFilter('');
+          setActiveTab(tab);
+        }}
       />
     </Layout>
   );

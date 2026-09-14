@@ -86,11 +86,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               .single();
             if (prof && mounted) setProfile(prof as Profile);
           } else {
-            setUser(null);
-            setProfile(null);
+            // Check if PIN session is active in localStorage before logging out
+            const storedProfileId = localStorage.getItem('dostlik_active_profile_id');
+            const isLocked = localStorage.getItem('dostlik_is_locked') === 'true';
+            if (storedProfileId && !isLocked) {
+              const currentProfiles = await entriesService.getProfiles();
+              const found = currentProfiles.find((p) => p.id === storedProfileId && p.is_active);
+              if (found && mounted) {
+                setUser({ id: found.id, email: `${found.id}@dostlikmarket.uz` });
+                setProfile(found);
+                setSelectedProfile(found);
+              } else if (mounted) {
+                setUser(null);
+                setProfile(null);
+              }
+            } else if (mounted) {
+              setUser(null);
+              setProfile(null);
+            }
           }
           setIsLoading(false);
         });
+
 
         return () => {
           mounted = false;
