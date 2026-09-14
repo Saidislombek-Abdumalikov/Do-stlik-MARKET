@@ -88,7 +88,7 @@ const HONORIFICS = [
   'qassob', 'qossop', 'qossob', 'kassob', 'novvoy', 'novoy', 'nonvoy',
   'bozorchi', 'haydovchi', 'shofyor', 'shofir', 'taksist', 'dokondor', "do'kondor",
   'suvoqchi', 'suvokchi', 'boyoqchi', "bo'yoqchi", 'kraskachi', 'santexnik', 'santex',
-  'svarchik', 'duradgor', 'jiyan', 'bola', 'akfachi', 'akfashik',
+  'svarchik', 'duradgor', 'jiyan', 'bola', 'akfachi', 'akfashik', 'akfa',
 ];
 
 // O'zbek xalqona shevalari va og'zaki talaffuzlarini me'yoriy shaklga keltirish
@@ -251,8 +251,25 @@ export function getTashkentDateString(refDate = new Date()): string {
   return tashkentTime.toISOString().split('T')[0];
 }
 
+/**
+ * Normalizes live speech recognition distortions before parsing or displaying:
+ * - "sherzod akfa" -> "sherzod akfachi"
+ * - "30224 030" / "30 224 030" -> "30 000"
+ * - "30 berish kerak" -> "30 ming berishi kerak"
+ */
+export function cleanSpeechInput(rawText: string): string {
+  if (!rawText) return '';
+  return rawText
+    .replace(/\bakfa\b/gi, 'akfachi')
+    .replace(/\bakfashik\b/gi, 'akfachi')
+    // Speech-to-text stutter/garbles: "30224 030" -> "30 000", "50123 050" -> "50 000"
+    .replace(/\b(10|15|20|25|30|35|40|45|50|60|70|80|90|100)\d{1,4}\s+0*(\1)\b/gi, '$1 000')
+    // Speech garble with berish kerak: "30 berish kerak" -> "30 ming berishi kerak"
+    .replace(/\b([1-9]\d?)\s*berish(?:i)?\s*kerak\b/gi, '$1 ming berishi kerak');
+}
+
 function cleanUzbekText(text: string): string {
-  return text
+  return cleanSpeechInput(text)
     .toLowerCase()
     .replace(/[ʻʼ`´]/g, "'")
     .replace(/[–—]/g, '-')
@@ -355,7 +372,16 @@ export function resolveCompoundNumbers(rawText: string): { amount: number; curre
   // 9. Plain numeric search (e.g., 145000, 85000, 50000, 30000, 3000)
   const allNums = text.match(/\b\d{4,9}\b/g);
   if (allNums && allNums.length > 0) {
-    return { amount: parseInt(allNums[allNums.length - 1], 10), currency: 'UZS' };
+    let num = parseInt(allNums[allNums.length - 1], 10);
+    // In grocery stores, if speech engine transcribed e.g. 30224 where the first 2 digits are a round decade (10, 20, 30, 40, 50)
+    // and ends in an unnatural number not divisible by 500, round to the decade:
+    if (num >= 10000 && num <= 99999 && num % 1000 !== 0 && num % 500 !== 0) {
+      const leadingDecade = Math.floor(num / 1000);
+      if ([10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90].includes(leadingDecade)) {
+        num = leadingDecade * 1000;
+      }
+    }
+    return { amount: num, currency: 'UZS' };
   }
 
   // 10. Store shortcut: "Farhod aka 30", "Olimjon oka 50", "100 yoz" (between 10 and 999 where no unit like kg/ta is attached)

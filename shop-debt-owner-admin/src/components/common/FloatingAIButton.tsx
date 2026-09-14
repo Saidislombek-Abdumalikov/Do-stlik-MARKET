@@ -21,6 +21,7 @@ import {
   resolveCompoundNumbers,
   getTashkentDateString,
   fuzzyMatchUzbek,
+  cleanSpeechInput,
 } from '../../utils/turboNasiyaEngine';
 import { parseNasiyaWithGemini } from '../../api/geminiService';
 import { formatMoney, formatDate } from '../../utils/formatters';
@@ -261,7 +262,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
 
   // Multi-stage AI parser
   const runAiParse = async (rawText: string) => {
-    const text = rawText.trim();
+    const text = cleanSpeechInput(rawText.trim());
     if (!text) return;
 
     // Stage 1: Analyzing
@@ -469,7 +470,8 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
           fullTranscript += event.results[i][0].transcript + ' ';
         }
 
-        const trimmed = fullTranscript.trim();
+        const rawTrimmed = fullTranscript.trim();
+        const trimmed = cleanSpeechInput(rawTrimmed);
         if (target === 'nasiya') {
           // Keep in buffer and show live reassurance preview
           spokenBufferRef.current = trimmed;
@@ -508,7 +510,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
         setLiveSpeechText('');
         // When speech finishes, reveal transcription and trigger multi-stage AI reasoning calmly
         if (target === 'nasiya') {
-          const finalSpoken = spokenBufferRef.current.trim();
+          const finalSpoken = cleanSpeechInput(spokenBufferRef.current.trim());
           if (finalSpoken) {
             setInputText(finalSpoken);
             runAiParse(finalSpoken);
@@ -875,7 +877,7 @@ export const FloatingAIButton: React.FC<FloatingAIButtonProps> = ({
                             if (recognitionRef.current) {
                               try { recognitionRef.current.stop(); } catch {}
                             }
-                            const finalSpoken = spokenBufferRef.current.trim();
+                            const finalSpoken = cleanSpeechInput(spokenBufferRef.current.trim());
                             if (finalSpoken) {
                               setInputText(finalSpoken);
                               runAiParse(finalSpoken);

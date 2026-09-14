@@ -8,6 +8,17 @@ export interface GeminiNasiyaParsed {
   phone: string | null;
 }
 
+export const getGeminiApiKey = (): string => {
+  if (typeof import.meta !== 'undefined' && import.meta?.env?.VITE_GEMINI_API_KEY) {
+    return String(import.meta.env.VITE_GEMINI_API_KEY).trim();
+  }
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('dostlik_VITE_GEMINI_API_KEY');
+    if (stored) return stored.trim();
+  }
+  return '';
+};
+
 export async function parseNasiyaWithGemini(
   userText: string,
   knownCustomerNames?: string[]
@@ -15,10 +26,7 @@ export async function parseNasiyaWithGemini(
   const text = userText.trim();
   if (!text) return null;
 
-  const apiKey =
-    typeof import.meta !== 'undefined' && import.meta?.env?.VITE_GEMINI_API_KEY
-      ? String(import.meta.env.VITE_GEMINI_API_KEY).trim()
-      : '';
+  const apiKey = getGeminiApiKey();
 
   if (!apiKey) {
     console.warn('VITE_GEMINI_API_KEY topilmadi. Turbo lokal NLP dvijogi ishlatiladi.');
@@ -35,28 +43,31 @@ Sening vazifang: Sotuvchi yoki kassir aytgan gapni (ovozdan olingan matnni) diqq
 ${customersContext}
 
 TAHLIL VA GURUHLASH QOIDALARI:
-1. MIJOZ ISMI / LAQABI:
+1. MIJOZ ISMI / KASBI / LAQABI:
    - Ovozli kiritish (Speech-to-Text) xatolarini to'g'rilash:
+     - "sherzod akfa", "sherzod akfashik", "sherzod akfachi" -> "Sherzod akfachi" (Akfa ustalari / romchilar)
      - "Farhod oka", "Farxod oka", "Farhod okaga", "Farxod okaga", "farxod o'quv", "farhod oquv" -> "Farhod aka"
      - "Abu qossop", "Qossopga", "Qassob", "Abu qassob" -> "Abu qassob" yoki "Qassob"
      - "Akmal akamga", "Akmal oka" -> "Akmal aka"
      - "Ustam", "Ustaga", "Sardor usta" -> "Sardor usta"
    - Agar sotuvchi mijoz ismini aytmagan bo'lsa (masalan: "30 000 so'm non" yoki "50 ming") -> customer_name: "Noma'lum mijoz"
-   - Agar biror hurmat so'zi (oka, aka, opa, tog'a, usta) bo'lsa, to'g'ri normallashtir.
+   - Agar biror hurmat so'zi yoki kasb (oka, aka, opa, tog'a, usta, akfachi, qassob) bo'lsa, to'g'ri normallashtir.
 
-2. SUMMA (PUL):
+2. SUMMA (PUL) VA OVOZ BUZILISHLARI:
    - Xalq tilidagi barcha summalar aniq so'mda son qilib hisoblansin:
-   - "30 000", "30.000", "30,000", "30 ming", "o'ttiz ming" -> 30000 (HECH QACHON 3000 emas!)
+   - Ovoz yozishda raqamlar buzilib "30224 030", "30 224 030", "30224", "30 030" kabi g'alati sonlar chiqsa, bular "30 ming" (30 000 so'm) deb aytilgan! Do'konda hech qachon 30224 so'm qarz bo'lmaydi. Buni darhol to'g'ri 30000 deb hisobla.
+   - "30 000", "30.000", "30,000", "30 ming", "o'ttiz ming", "30 ming berishi kerak", "30224 030 berish kerak" -> 30000 (HECH QACHON 3000 yoki 30224030 emas!)
    - "50 ming", "ellik ming", "50.000" -> 50000
    - "145 ming", "145.000" -> 145000
    - "1 yarim million", "1.5 mln" -> 1500000
-   - "Farhod aka 30" (do'konda 10-999 oralig'ida birliksiz aytilsa minglik deb tushun) -> 30000
+   - "30 berish kerak", "Farhod aka 30" -> 30000
 
 3. MAHSULOTLAR (ITEMS):
    - Masalan: "2 ta non, 1 kg go'sht", "yog', shakar", "50 mingli go'sh" -> items: "2 ta non, 1 kg go'sht"
 
 4. MUDDAT (DUE_CONDITION):
    - "ertaga", "bugun kechga", "3 kunda", "hafta oxirida", "oylikda", "pensiyada" kabi shartlarni ajratib ol.
+   - "berishi kerak", "berish kerak", "beradi" so'zlari qarz olinganini bildiradi (nasiya).
 
 FAQAT va FAQAT quyidagi JSON formatida javob ber:
 {
